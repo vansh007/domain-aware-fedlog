@@ -1,0 +1,13 @@
+# Single-domain BGL baseline — Week-1 gate.
+experiment_name: bgl_baseline
+data_root: data
+split: iid
+seed: 0
+domains:
+  - name: bgl
+    clients: 3
+methods:
+  - length
+  - known_events    # expected strong on BGL (~0.99) — BGL anomalies have unseen events
+  - deeplog
+run_domain_aware: false

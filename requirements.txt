@@ -1,0 +1,11 @@
+# Core — the scaffold runs on these alone
+PyYAML>=6.0
+matplotlib>=3.7
+
+# For Week 1 when you wire the reference DeepLog (their repo pins these too)
+# flwr[simulation]>=1.8      # Flower — federated learning framework
+# torch>=2.2                 # DeepLog / LogAnomaly LSTM (CPU build is fine)
+# numpy>=1.26
+
+# The reference repo uses Python 3.12.3. Match it to avoid surprises.
+# Install their extras from reference_repo/requirements.txt after cloning.

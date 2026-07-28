@@ -1,0 +1,14 @@
+# Single-domain HDFS baseline — Week-1 gate.
+# Goal: reproduce the reference paper's HDFS picture before touching mixed domains.
+experiment_name: hdfs_baseline
+data_root: data
+split: iid
+seed: 0
+domains:
+  - name: hdfs
+    clients: 3
+methods:
+  - length          # expected weak on HDFS alone (~0.57 in reference) — sanity check
+  - known_events
+  - deeplog         # skipped until reference repo wired
+run_domain_aware: false

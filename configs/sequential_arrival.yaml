@@ -1,0 +1,21 @@
+# H3: domains arrive one after another. HDFS first, then BGL.
+# Measures (a) forgetting on HDFS after BGL arrives, (b) model-size growth per arrival.
+# NOTE: run_experiment.py currently runs a static federation; sequential orchestration
+# is a Week-3 addition (loop over arrivals, snapshot metrics after each). This config
+# defines the arrival ORDER and what to measure.
+experiment_name: sequential_arrival
+data_root: data
+split: iid
+seed: 0
+arrival_order:
+  - hdfs
+  - bgl
+clients_per_domain: 3
+methods:
+  - known_events
+  - length
+  - deeplog
+measure:
+  - per_domain_f1_after_each_arrival
+  - model_size_bytes_after_each_arrival
+run_domain_aware: true

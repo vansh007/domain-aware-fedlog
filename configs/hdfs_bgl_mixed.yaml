@@ -1,0 +1,17 @@
+# THE experiment. The config that does not exist in the reference repo.
+# One federation: 3 HDFS clients + 2 BGL clients, over a merged 427-event vocabulary.
+# Tests H1 (Length collapses on HDFS) and H2 (DeepLog degrades) under domain mixing.
+experiment_name: hdfs_bgl_mixed
+data_root: data
+split: iid            # start IID so any drop is due to DOMAIN mixing, not quantity skew
+seed: 0
+domains:
+  - name: hdfs
+    clients: 3
+  - name: bgl
+    clients: 2
+methods:
+  - length            # domain-blind global range -> predicted H1 failure on HDFS
+  - known_events
+  - deeplog           # FedAvg over disjoint vocabularies -> predicted H2 failure
+run_domain_aware: true  # also run OUR per-domain fix for direct comparison

@@ -1,0 +1,12 @@
+# never commit raw logs or produced results
+data/*
+!data/README.md
+results/*
+!results/.gitkeep
+reference_repo/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# local, machine-specific Claude Code settings
+.claude/settings.local.json
