@@ -15,6 +15,28 @@ Format for each entry:
 
 ---
 
+## 2026-08-05 (cont.) — Closed the domain-unknown routing open problem
+- Did: Implemented `predict_domain_unknown` in src/aggregation.py (was NotImplementedError stub)
+  with TWO tag-free routing strategies + an `infer_domains` helper. NO MoE/adapter/ML router — the
+  disjoint vocabulary structure already encodes domain identity; we read it back off the ids.
+  1. vocab_block (Strategy 1): infer domain from event-id block; majority vote; id outside all
+     blocks -> "unknown domain" -> flagged anomalous.
+  2. conservative (Strategy 2): no inference; flag only if length outside EVERY domain's range.
+  `scripts/run_domain_routing.py` evaluates oracle vs both, 5 seeds -> results/domain_routing.csv.
+- Found: vocab_block == oracle EXACTLY on every test seq and seed (route_acc 1.000+/-0.000, 0
+  unknown; HDFS 0.5614+/-0.0236, BGL 0.0332+/-0.0435 — identical to oracle). Conservative COLLAPSES
+  on HDFS (0.0000+/-0.0001): HDFS anomalies are long enough to fit inside BGL's wide range, so
+  "outside every range" never fires — the same containment that causes H1. Conservative == oracle
+  only on BGL (the widest domain). So inference IS needed, and the vocab block supplies it perfectly,
+  tag-free. Open case = OVERLAPPING vocabularies (shared template) -> future work.
+- Wired into main.tex: new Table tab:routing; updated sec:da "Removing the oracle tag" + sec:h1
+  "fix needs no oracle tag" to the two-strategy comparison (replaces the single-router paragraph,
+  now cites domain_routing.csv). Structural validation PASS (9 tables, refs/cites/figs/envs balanced).
+- Next: verify citations; ieeeaccess.cls; compile. 3rd dataset still the open user decision.
+- Blocked on: Nothing.
+
+---
+
 ## 2026-08-05 — Publishability push #2: EWC vs replay, directional forgetting, figures
 - Did: Two NEW real experiments (3 seeds each) + analytical + figure overhaul, to reduce the
   two biggest reviewer risks.

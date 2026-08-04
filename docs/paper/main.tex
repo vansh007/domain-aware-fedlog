@@ -244,11 +244,14 @@ over the union of that domain's client data, it is \emph{invariant} to how the d
 across clients, so the fix is robust to quantity skew by construction.
 
 \textbf{Removing the oracle tag.} The routing above assumes a domain tag on each test sequence.
-A real deployment may not provide one, so we replace the oracle tag with an \emph{inferred} tag:
-because each domain owns a contiguous, disjoint id block ($[0,33)$ for HDFS, $[33,427)$ for BGL), a
-sequence's domain is the majority block of its event ids. We evaluate this router directly in
-Section~\ref{sec:h1}: it routes every test sequence correctly and reproduces the oracle-tag $F_1$
-exactly, so the fix is deployable without any external domain label.
+A real deployment may not provide one, so we consider two tag-free strategies. \emph{Vocabulary-block
+routing} infers a sequence's domain from its event ids: because each domain owns a contiguous, disjoint
+id block ($[0,33)$ for HDFS, $[33,427)$ for BGL), a sequence's domain is the majority block of its ids,
+and a sequence with an id outside every block is flagged as anomalous (unknown domain). \emph{Conservative
+routing} avoids inference entirely, flagging a sequence only if its length is outside \emph{every}
+domain's range. We evaluate both against the oracle in Section~\ref{sec:h1}: vocabulary-block routing
+reproduces the oracle-tag $F_1$ exactly (so the fix is deployable without any external domain label),
+whereas conservative routing collapses on the tighter domain.
 
 \section{Experimental Setup}\label{sec:setup}
 We use the HDFS and BGL benchmarks from Loghub~\cite{zhu2023loghub}, parsed into event-id sequences.
@@ -318,14 +321,39 @@ and the domain-aware fix (per-domain $[\underline{L}_d,\overline{L}_d]$) removes
 construction, for any number of domains. The two-domain experiment instantiates a general
 containment condition rather than a single data point.
 
-\textbf{The fix needs no oracle tag.} To show the fix is deployable rather than dependent on a
-ground-truth domain label, we replace the oracle tag with the inferred router of
-Section~\ref{sec:da}, which reads each sequence's domain off its event-id block. Across five seeds
-the router assigns the correct domain to \emph{every} test sequence (routing accuracy
-$1.000\pm0.000$ on all $569{,}479$ HDFS and $68{,}874$ BGL test sequences) and therefore reproduces
-the oracle-tag $F_1$ exactly (HDFS $0.5614\pm0.0236$; \texttt{results/h1\_inferred\_router.csv}).
-The disjoint id blocks that \emph{cause} the domain-blind collapse are the same structure that makes
-the domain recoverable at inference, so no external label is required.
+\textbf{The fix needs no oracle tag.} A real deployment may not label a sequence's domain, so we
+evaluate the domain-aware fix under two tag-free routing strategies and compare both to the oracle
+(Table~\ref{tab:routing}; \texttt{results/domain\_routing.csv}, five seeds). \emph{Vocabulary-block
+routing} infers a sequence's domain from the event-id block its ids fall in (HDFS owns $[0,33)$, BGL
+$[33,427)$), by majority, and flags a sequence whose ids fall outside every known block as anomalous.
+\emph{Conservative routing} performs no inference at all: it flags a sequence only if its length lies
+outside \emph{every} domain's range. Vocabulary-block routing recovers the true domain of \emph{every}
+one of the $569{,}479$ HDFS and $68{,}874$ BGL test sequences per seed (routing accuracy
+$1.000\pm0.000$, zero unknown-domain sequences) and therefore reproduces the oracle-tag $F_1$
+\emph{exactly}, seed for seed (HDFS $0.5614\pm0.0236$, BGL $0.0332\pm0.0435$). Conservative routing, by
+contrast, collapses on HDFS ($F_1\,0.000\pm0.000$): HDFS anomalies are long enough to sit inside BGL's
+wide range, so ``outside every range'' never fires for them---the same containment that causes H1. The
+disjoint id blocks that \emph{cause} the domain-blind collapse are thus the exact structure that makes
+the domain recoverable at inference; no external label, and no learned router, is required. This holds
+because the two vocabularies are disjoint---the event id \emph{is} the domain label; the open case is
+\emph{overlapping} vocabularies (a template shared across domains), where the block no longer
+identifies the domain uniquely, which we leave to future work.
+
+\begin{table}[t]
+\caption{Tag-free routing for domain-aware Length (mean $\pm$ std, $n=5$ seeds). Vocabulary-block
+inference equals oracle routing exactly (routing accuracy $1.000$); conservative routing needs no
+inference but collapses on HDFS. Source: \texttt{results/domain\_routing.csv}.}
+\label{tab:routing}
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Domain & Oracle $F_1$ & Vocab-block $F_1$ & Conservative $F_1$ \\
+\midrule
+HDFS & $0.5614\pm0.0236$ & $\mathbf{0.5614\pm0.0236}$ & $0.0000\pm0.0001$ \\
+BGL  & $0.0332\pm0.0435$ & $0.0332\pm0.0435$ & $0.0332\pm0.0435$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{table}[t]
 \caption{H1: per-domain $F_1$ (mean $\pm$ std, $n=5$ seeds), IID mixed federation.
