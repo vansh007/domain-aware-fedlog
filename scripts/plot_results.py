@@ -103,9 +103,10 @@ def h1_collapse_recover(summary_path: str, out: str,
                 base_length[r["domain"]] = float(r["f1"])
 
     n_series = len(series)
-    group_w = 0.8
+    group_w = 0.78
     bar_w = group_w / n_series
-    fig, ax = plt.subplots(figsize=(8.5, 5))
+    fig, ax = plt.subplots(figsize=(9, 5.4))
+    lbl_box = dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85)
 
     for si, (method, label, color) in enumerate(series):
         xs, means, errs = [], [], []
@@ -116,31 +117,37 @@ def h1_collapse_recover(summary_path: str, out: str,
             means.append(m)
             errs.append(s)
         bars = ax.bar(xs, means, width=bar_w * 0.92, yerr=errs, capsize=4,
-                      label=label, color=color, edgecolor="black", linewidth=0.4)
-        for b, m in zip(bars, means):
-            ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.015,
-                    f"{m:.3f}", ha="center", va="bottom", fontsize=8)
+                      label=label, color=color, edgecolor="black", linewidth=0.5,
+                      error_kw=dict(elinewidth=1.1))
+        # value label placed ABOVE the error-bar cap so it never sits inside the whisker
+        for b, m, e in zip(bars, means, errs):
+            ax.text(b.get_x() + b.get_width() / 2, m + e + 0.022,
+                    f"{m:.3f}", ha="center", va="bottom", fontsize=9, bbox=lbl_box)
 
-    # single-domain baseline overlay (dashed line spanning each domain's group)
+    # single-domain baseline overlay (dashed line spanning each domain's group).
+    # The label is anchored at the LEFT end of the segment (ha="left") so it never
+    # collides with the right-most bar's value label.
     for di, dom in enumerate(domains):
         if dom in base_length:
             y = base_length[dom]
-            ax.plot([di - group_w / 2, di + group_w / 2], [y, y],
-                    linestyle="--", color="black", linewidth=1.1, alpha=0.7,
+            ax.plot([di - group_w / 2 - 0.08, di + group_w / 2 + 0.08], [y, y],
+                    linestyle="--", color="black", linewidth=1.3, alpha=0.8,
                     label="Length single-domain baseline" if di == 0 else None)
-            ax.text(di + group_w / 2, y + 0.01, f"baseline {y:.3f}",
-                    ha="right", va="bottom", fontsize=7, style="italic")
+            ax.text(di - group_w / 2 - 0.06, y - 0.045, f"baseline {y:.3f}",
+                    ha="left", va="top", fontsize=8, style="italic", bbox=lbl_box)
 
     ax.set_xticks(range(len(domains)))
-    ax.set_xticklabels([d.upper() for d in domains])
-    ax.set_ylabel("F1 (mean ± std over 5 seeds)")
-    ax.set_ylim(0, 1.05)
-    ax.set_title("H1: mixed-federation Length collapses on HDFS; domain-aware aggregation recovers it")
-    ax.legend(fontsize=8, loc="upper left")
+    ax.set_xticklabels([d.upper() for d in domains], fontsize=11)
+    ax.set_ylabel("F1  (mean ± std over 5 seeds)", fontsize=11)
+    ax.set_ylim(0, 1.14)
+    ax.set_title("H1: mixed-federation Length collapses on HDFS;\ndomain-aware aggregation recovers it",
+                 fontsize=12)
+    ax.legend(fontsize=9, loc="upper center", ncol=2, framealpha=0.95)
     ax.grid(axis="y", alpha=0.3)
+    ax.tick_params(axis="y", labelsize=10)
     fig.tight_layout()
     os.makedirs("results", exist_ok=True)
-    fig.savefig(out, dpi=150)
+    fig.savefig(out, dpi=200)
     print(f"wrote {out}")
 
 
@@ -173,35 +180,61 @@ def h3_curves(seq_path: str, out: str) -> None:
              if r["method"] == method and r["eval_domain"] == "hdfs"}
         return [d.get(s) for s in stages]
 
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11, 4.5))
+    pretty = {"known_events": "Known Events (set-union)", "deeplog": "DeepLog (scalar-id)"}
+    lbl_box = dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.9)
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.5, 5))
 
+    # ---- left panel: model size (log scale) with byte labels + growth factor ----
     for m in methods:
         ys = series_size(m)
         if all(v is not None for v in ys):
-            axL.plot(stage_label, ys, marker="o", label=m, color=colors.get(m))
-    axL.set_ylabel("model state size (bytes)")
-    axL.set_title("H3: model-size growth across domain arrivals")
+            axL.plot(stage_label, ys, marker="o", markersize=8, linewidth=2,
+                     label=pretty.get(m, m), color=colors.get(m))
+            va = ["bottom", "top"] if m == "deeplog" else ["top", "bottom"]
+            for i, (x, y) in enumerate(zip(stage_label, ys)):
+                off = 1.28 if va[i] == "bottom" else 0.78
+                axL.text(x, y * off, f"{y:,} B", ha="center", va=va[i],
+                         fontsize=9, bbox=lbl_box)
+    # annotate the set-union growth factor (the C2-breaking result)
+    ke = series_size("known_events")
+    if ke and all(v is not None for v in ke):
+        axL.annotate(f"×{ke[1] / ke[0]:.1f} growth",
+                     xy=(1, ke[1]), xytext=(0.42, ke[1] * 2.4),
+                     fontsize=10, color=colors["known_events"], fontweight="bold",
+                     arrowprops=dict(arrowstyle="->", color=colors["known_events"]))
+    axL.set_ylabel("model state size (bytes, log scale)", fontsize=11)
+    axL.set_title("Model-size growth across domain arrivals", fontsize=12)
     axL.set_yscale("log")
-    axL.grid(alpha=0.3)
-    axL.legend(fontsize=8)
+    axL.set_ylim(1e3, 1e6)
+    axL.margins(x=0.18)
+    axL.grid(alpha=0.3, which="both")
+    axL.legend(fontsize=9, loc="center left")
+    axL.tick_params(labelsize=10)
 
+    # ---- right panel: HDFS F1 retention; separate the two lines' labels ----
     for m in methods:
         ys = series_f1(m)
         if all(v is not None for v in ys):
-            axR.plot(stage_label, ys, marker="o", label=m, color=colors.get(m))
+            axR.plot(stage_label, ys, marker="o", markersize=8, linewidth=2,
+                     label=pretty.get(m, m), color=colors.get(m))
+            dy = 0.035 if m == "known_events" else -0.06   # push labels apart
+            va = "bottom" if m == "known_events" else "top"
             for x, y in zip(stage_label, ys):
-                axR.text(x, y + 0.015, f"{y:.3f}", ha="center", fontsize=8)
-    axR.set_ylabel("HDFS F1 (earlier domain)")
-    axR.set_ylim(0, 1.05)
-    axR.set_title("H3: HDFS F1 after BGL arrives (higher = less forgetting)")
+                axR.text(x, y + dy, f"{y:.3f}", ha="center", va=va,
+                         fontsize=9, color=colors.get(m), bbox=lbl_box)
+    axR.set_ylabel("HDFS F1 (earlier domain)", fontsize=11)
+    axR.set_ylim(0, 1.08)
+    axR.margins(x=0.18)
+    axR.set_title("HDFS F1 after BGL arrives (higher = less forgetting)", fontsize=12)
     axR.grid(alpha=0.3)
-    axR.legend(fontsize=8)
+    axR.legend(fontsize=9, loc="lower center")
+    axR.tick_params(labelsize=10)
 
-    fig.suptitle("H3: set-union grows unbounded; DeepLog stays fixed-size — "
-                 "neither forgets here (scalar-id input keeps domains separable)")
-    fig.tight_layout()
+    fig.suptitle("H3: set-union grows unbounded (breaks C2) while DeepLog stays fixed-size;\n"
+                 "with the scalar-id input neither forgets HDFS", fontsize=13)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
     os.makedirs("results", exist_ok=True)
-    fig.savefig(out, dpi=150)
+    fig.savefig(out, dpi=200)
     print(f"wrote {out}")
 
 
@@ -227,28 +260,44 @@ def mechanism(scalar_h3: str, embed_h3: str, out: str) -> None:
 
     stages = ["after HDFS\n(trained)", "after BGL\n(adapted)"]
     x = range(len(stages))
-    fig, ax = plt.subplots(figsize=(7.5, 5))
-    ax.plot(x, [s_before, s_after], marker="o", markersize=9, linewidth=2.2,
-            color="#1C7293", label="scalar id input (disjoint ranges)")
-    ax.plot(x, [e_before, e_after], marker="s", markersize=9, linewidth=2.2,
-            color="#C1440E", label="embedding input (shared feature space)")
-    for xi, y in zip(x, [s_before, s_after]):
-        ax.text(xi, y + 0.02, f"{y:.3f}", ha="center", color="#1C7293", fontsize=9)
-    for xi, y in zip(x, [e_before, e_after]):
-        ax.text(xi, y - 0.05, f"{y:.3f}", ha="center", color="#C1440E", fontsize=9)
-    ax.annotate("catastrophic\nforgetting", xy=(1, e_after), xytext=(0.55, 0.28),
-                arrowprops=dict(arrowstyle="->", color="#C1440E"), color="#C1440E", fontsize=9)
+    lbl_box = dict(boxstyle="round,pad=0.18", fc="white", ec="none", alpha=0.9)
+    fig, ax = plt.subplots(figsize=(8, 5.4))
+    ax.plot(x, [s_before, s_after], marker="o", markersize=10, linewidth=2.4,
+            color="#1C7293", label="scalar-id input (disjoint ranges) — no forgetting")
+    ax.plot(x, [e_before, e_after], marker="s", markersize=10, linewidth=2.4,
+            color="#C1440E", label="embedding input (shared feature space) — forgets")
+
+    # scalar labels sit ABOVE the (overlapping) start point and above the end point
+    ax.text(0, s_before + 0.035, f"{s_before:.3f}", ha="center", va="bottom",
+            color="#1C7293", fontsize=10, bbox=lbl_box)
+    ax.text(1, s_after + 0.035, f"{s_after:.3f}", ha="center", va="bottom",
+            color="#1C7293", fontsize=10, bbox=lbl_box)
+    # embedding start label goes BELOW start (so it clears the scalar label);
+    # embedding end label goes ABOVE its point so it is never clipped by the axis
+    ax.text(0, e_before - 0.05, f"{e_before:.3f}", ha="center", va="top",
+            color="#C1440E", fontsize=10, bbox=lbl_box)
+    ax.text(1, e_after + 0.05, f"{e_after:.3f}", ha="center", va="bottom",
+            color="#C1440E", fontsize=10, bbox=lbl_box)
+
+    # annotation placed to the LEFT of the descending line, not on top of it
+    ax.annotate("catastrophic\nforgetting\n(0.665 drop)",
+                xy=(0.62, 0.30), xytext=(0.16, 0.46),
+                arrowprops=dict(arrowstyle="->", color="#C1440E", lw=1.4),
+                color="#C1440E", fontsize=10, fontweight="bold", ha="center")
     ax.set_xticks(list(x))
-    ax.set_xticklabels(stages)
-    ax.set_ylabel("HDFS F1 (earlier domain)")
-    ax.set_ylim(0, 1.0)
+    ax.set_xticklabels(stages, fontsize=11)
+    ax.set_xlim(-0.35, 1.35)
+    ax.set_ylabel("HDFS F1 (earlier domain)", fontsize=11)
+    ax.set_ylim(-0.05, 1.05)
     ax.set_title("Mechanism: DeepLog forgets HDFS under sequential arrival\n"
-                 "only when the input representation makes domains share feature space")
-    ax.legend(loc="center left", fontsize=9)
+                 "only when the input representation makes domains share feature space",
+                 fontsize=12)
+    ax.legend(loc="center right", fontsize=9, framealpha=0.95)
     ax.grid(alpha=0.3)
+    ax.tick_params(axis="y", labelsize=10)
     fig.tight_layout()
     os.makedirs("results", exist_ok=True)
-    fig.savefig(out, dpi=150)
+    fig.savefig(out, dpi=200)
     print(f"wrote {out}")
 
 
@@ -288,9 +337,115 @@ def h2_bars(h2_path: str, out: str) -> None:
     print(f"wrote {out}")
 
 
+def two_by_two_map(out: str) -> None:
+    """The signature conceptual figure: a 2x2 over {arrival pattern} x {representation}.
+    Only (sequential, shared-representation) fails. Values are the paper's measured drops.
+    This figure summarizes H2 + H3 + the mechanism experiment in one panel."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import FancyBboxPatch
+    except ImportError:
+        sys.exit("matplotlib not installed — pip install -r requirements.txt")
+
+    SAFE = "#2E7D32"; FAIL = "#C1440E"
+    # (col, row) -> (bg, verdict, detail).  col: 0=simultaneous 1=sequential
+    #                                        row: 0=scalar(disjoint) 1=embedding(shared)
+    cells = {
+        (0, 0): (SAFE, "SAFE", "HDFS drop\n+0.0002"),
+        (1, 0): (SAFE, "SAFE", "forgetting\n0.000"),
+        (0, 1): (SAFE, "SAFE", "HDFS drop\n-0.0025"),
+        (1, 1): (FAIL, "FAILS", "HDFS F1\n0.70 -> 0.04\nforgetting 0.665"),
+    }
+    fig, ax = plt.subplots(figsize=(8.2, 6))
+    for (c, r), (bg, verdict, detail) in cells.items():
+        ax.add_patch(FancyBboxPatch((c + 0.04, r + 0.04), 0.92, 0.92,
+                     boxstyle="round,pad=0.0,rounding_size=0.04",
+                     linewidth=0, facecolor=bg, alpha=0.90))
+        mark = "✓" if verdict == "SAFE" else "✗"
+        ax.text(c + 0.5, r + 0.72, f"{mark} {verdict}", ha="center", va="center",
+                fontsize=17, fontweight="bold", color="white")
+        ax.text(c + 0.5, r + 0.36, detail, ha="center", va="center",
+                fontsize=12, color="white")
+
+    ax.set_xlim(0, 2); ax.set_ylim(0, 2)
+    ax.set_xticks([0.5, 1.5]); ax.set_yticks([0.5, 1.5])
+    ax.set_xticklabels(["Simultaneous\n(mixed at once)", "Sequential\n(arrives later)"], fontsize=12)
+    ax.set_yticklabels(["Scalar id\n(disjoint ranges)", "Embedding\n(shared feature space)"],
+                       fontsize=12, rotation=90, va="center")
+    ax.set_xlabel("Arrival pattern", fontsize=13, fontweight="bold")
+    ax.set_ylabel("Input representation", fontsize=13, fontweight="bold")
+    ax.set_title("When is federated log anomaly detection safe?\n"
+                 "Only one of four regimes fails", fontsize=14)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.tick_params(length=0)
+    fig.tight_layout()
+    os.makedirs("results", exist_ok=True)
+    fig.savefig(out, dpi=200)
+    print(f"wrote {out}")
+
+
+def replay_curve(replay_path: str, out: str) -> None:
+    """Replay mitigation curve from results/mitigation_replay.csv: HDFS retention and BGL
+    learning vs buffer size, mean +/- std over seeds. Shows a >=10% buffer restores HDFS to
+    its pre-arrival level while BGL is still learned."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        sys.exit("matplotlib not installed — pip install -r requirements.txt")
+
+    rows = _load(replay_path)
+    fracs = sorted({float(r["frac"]) for r in rows})
+
+    def agg(frac, key):
+        vals = [float(r[key]) for r in rows if float(r["frac"]) == frac]
+        m = sum(vals) / len(vals)
+        sd = (sum((v - m) ** 2 for v in vals) / len(vals)) ** 0.5
+        return m, sd
+
+    xs = [f * 100 for f in fracs]
+    hdfs = [agg(f, "hdfs_after") for f in fracs]
+    bgl = [agg(f, "bgl_after") for f in fracs]
+    before = agg(fracs[0], "hdfs_before")[0]
+    lbl_box = dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.9)
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.2))
+    ax.axhline(before, ls="--", color="black", alpha=0.7,
+               label=f"HDFS pre-arrival target ({before:.3f})")
+    ax.errorbar(xs, [m for m, _ in hdfs], yerr=[s for _, s in hdfs], marker="o",
+                markersize=8, linewidth=2, capsize=4, color="#1C7293",
+                label="HDFS F1 after (retention)")
+    ax.errorbar(xs, [m for m, _ in bgl], yerr=[s for _, s in bgl], marker="s",
+                markersize=8, linewidth=2, capsize=4, color="#C1440E",
+                label="BGL F1 after (new domain learned)")
+    for x, (m, _) in zip(xs, hdfs):
+        ax.text(x, m + 0.06, f"{m:.2f}", ha="center", va="bottom", fontsize=9,
+                color="#1C7293", bbox=lbl_box)
+    ax.annotate(">=10% buffer\nremoves forgetting", xy=(10, hdfs[2][0]),
+                xytext=(22, 0.33), fontsize=10, color="#2E7D32", fontweight="bold",
+                arrowprops=dict(arrowstyle="->", color="#2E7D32"))
+    ax.set_xlabel("replay buffer size (% of earlier-domain training pool of 5,582 seqs)", fontsize=11)
+    ax.set_ylabel("F1 after BGL arrives", fontsize=11)
+    ax.set_ylim(0, 1.02)
+    ax.set_title("Replay mitigation: a small buffer restores HDFS while BGL is still learned\n"
+                 "(embedding-DeepLog, sequential HDFS -> BGL, mean +/- std over 3 seeds)", fontsize=12)
+    ax.legend(fontsize=9, loc="center right")
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    os.makedirs("results", exist_ok=True)
+    fig.savefig(out, dpi=200)
+    print(f"wrote {out}")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--kind", choices=["f1_compare", "h1", "h2", "h3", "mech"], required=True)
+    ap.add_argument("--kind",
+                    choices=["f1_compare", "h1", "h2", "h3", "mech", "map", "replay"],
+                    required=True)
     ap.add_argument("--single")
     ap.add_argument("--mixed")
     ap.add_argument("--summary", default="results/h1_multiseed.csv",
@@ -312,3 +467,7 @@ if __name__ == "__main__":
         h3_curves(args.mixed or "results/h3_sequential.csv", args.out)
     elif args.kind == "mech":
         mechanism("results/h3_sequential.csv", "results/h3_sequential_embedding.csv", args.out)
+    elif args.kind == "map":
+        two_by_two_map(args.out)
+    elif args.kind == "replay":
+        replay_curve(args.mixed or "results/mitigation_replay.csv", args.out)

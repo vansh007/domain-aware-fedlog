@@ -15,6 +15,36 @@ Format for each entry:
 
 ---
 
+## 2026-08-05 — Publishability push #2: EWC vs replay, directional forgetting, figures
+- Did: Two NEW real experiments (3 seeds each) + analytical + figure overhaul, to reduce the
+  two biggest reviewer risks.
+  1. EWC mitigation (`scripts/mitigation_ewc.py`): memory-free anti-forgetting vs replay. EWC
+     removes forgetting ONLY at lambda=1e8 (forget +0.014+/-0.005, HDFS 0.690, BGL 0.752); at
+     lambda<=1e4 no effect — needs tuning across 6 orders of magnitude. Replay works tuning-free
+     at 10%. Honest trade-off, both fixes valid. `results/mitigation_ewc.csv`. New sec:ewc + tab:ewc.
+  2. Reverse-order H3 (`scripts/h3_reverse_order.py`): forgetting is DIRECTIONAL. Forward
+     HDFS->BGL embedding forgets +0.665; reverse BGL->HDFS does NOT forget (-0.103+/-0.006, BGL
+     improves); scalar safe both ways. Failure = onboarding BROAD-vocab (BGL 394) AFTER NARROW
+     (HDFS 33). `results/h3_reverse_order.csv`. New "Forgetting is directional" para + tab:reverse.
+  3. H1 generality: added an analytical min-max containment condition — the collapse is general
+     over any domain pair where one domain's normal-length support covers another's anomaly-length
+     support, not specific to HDFS+BGL. Directly answers the "only 2 domains" concern for H1.
+  4. Figures: fixed all overlaps + illegible values on the 3 existing figures (baseline-label
+     collision in H1; missing byte labels + swamped x3.7 in H3; clipped 0.037 + on-line annotation
+     in mechanism); regenerated at 200dpi with white-boxed labels. Added 2 NEW figures:
+     two_by_two_map.png (signature 2x2), replay_mitigation.png (buffer-size curve). `plot_results.py`
+     gained kinds `map` and `replay`.
+  5. Wired all into main.tex; updated abstract, contributions (iii), future work, map caption.
+     Structural validation PASSED: refs/cites/bibitems/figures/envs all balanced (no local TeX to compile).
+- Found: Both new results are clean and strengthen the paper (diagnose->explain->fix->compare, plus a
+  directional refinement). No prior result reversed.
+- Next: verify the 3 TODO(verify) citations; swap to ieeeaccess.cls; compile PDF. The one big
+  remaining lever is a genuine 3rd dataset (needs a Drain parser = the CLAUDE.md-scoped "separate
+  month"); flagged to the user as a decision, not silently done.
+- Blocked on: Nothing.
+
+---
+
 ## 2026-07-26 (cont.) — Publishability upgrades: deployable H1 router + replay fix
 - Did: Honest novelty review of the paper, then added two REAL in-scope experiments to raise it
   from "diagnosis-only" to "diagnose -> explain -> FIX".

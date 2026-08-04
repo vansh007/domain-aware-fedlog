@@ -58,11 +58,13 @@ two vocabularies share a feature space. A controlled experiment (scalar identifi
 learned embedding) isolates this cause. Set-union detectors, separately, never forget but grow
 $\times3.7$ as a single domain arrives, breaking the bounded-size property under evolution. The
 result is a precise $2\times2$ map---\{simultaneous, sequential\}$\times$\{disjoint, shared
-representation\}, in which exactly one cell fails---together with simple, effective fixes for both
-failures that do occur: a domain-aware aggregation that restores the collapsed range method (and
-routes with no oracle domain tag, at $100\%$ inferred-routing accuracy), and a small replay buffer
-($\approx10\%$ of the earlier domain's data) that cuts the forgetting from $0.665$ to $0.004$ while
-still learning the new domain. All results are reproduced from real runs on commodity CPU.
+representation\}, in which exactly one cell fails; we further show this failure is \emph{directional},
+occurring only when a broad-vocabulary domain is onboarded after a narrow one. We give working fixes
+for both failures: a domain-aware aggregation that restores the collapsed range method (routing with no
+oracle domain tag, at $100\%$ inferred-routing accuracy), and, for the forgetting, both a small replay
+buffer ($\approx10\%$ of the earlier domain's data, cutting forgetting from $0.665$ to $0.004$) and a
+memory-free EWC alternative, which we compare directly. All results are reproduced from real runs on
+commodity CPU.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -126,8 +128,10 @@ first empirical demonstration, across five seeds and both IID and non-IID splits
 range aggregation fails under domain skew, with a minimal domain-aware fix that restores single-domain
 performance and routes at inference with no oracle tag ($100\%$ inferred-routing accuracy);
 (iii) a controlled analysis showing that \emph{simultaneous} mixing is safe but \emph{sequential}
-arrival is catastrophic \emph{iff} the representation shares a feature space, together with a replay
-mitigation that removes the forgetting at negligible cost; and (iv) a reproducible, CPU-only artifact
+arrival is catastrophic \emph{iff} the representation shares a feature space, and that this forgetting is
+\emph{directional} (only broad-after-narrow onboarding forgets), together with two mitigations we compare
+head-to-head---a memory-based replay buffer and memory-free EWC---that each remove the forgetting; and
+(iv) a reproducible, CPU-only artifact
 in which every reported number traces to a result file.
 
 \section{Related Work}
@@ -296,6 +300,24 @@ mechanism rather than assert general collapse. Third, the story is unchanged und
 quantity skew, and domain-aware Length is \emph{partition-invariant} by construction (its HDFS
 numbers are identical under IID and non-IID; see \texttt{results/h1\_multiseed\_lognormal.csv}).
 
+\textbf{Why this is not specific to HDFS+BGL.} The collapse is a structural property of min--max
+union, not an accident of this domain pair, and a short argument makes the generality precise.
+Domain-blind Length flags a test sequence of length $\ell$ iff $\ell\notin[\underline{L},\overline{L}]$,
+where $\underline{L}=\min_d \underline{L}_d$ and $\overline{L}=\max_d \overline{L}_d$ are the global
+min-of-mins and max-of-maxes over all co-training domains $d$. Consider a ``victim'' domain $a$ whose
+anomalies are detectable standalone because their lengths lie outside $a$'s own normal range
+$[\underline{L}_a,\overline{L}_a]$. If \emph{any} co-training domain $b$ satisfies
+$\underline{L}_b\le \underline{L}_a^{\mathrm{anom}}$ and $\overline{L}_b\ge \overline{L}_a^{\mathrm{anom}}$
+(its normal-length support covers $a$'s anomaly-length support), then the global range
+$[\underline{L},\overline{L}]\supseteq[\underline{L}_a^{\mathrm{anom}},\overline{L}_a^{\mathrm{anom}}]$ and
+\emph{every} such anomaly falls inside the global range, driving $a$'s recall---and hence $F_1$---to
+zero. This is exactly what a wide-spread domain like BGL ($69\pm747$) does to a tight one like HDFS
+($29\pm6$), but the condition is stated over arbitrary domains: any heterogeneous federation
+containing one broad-length domain will collapse range-based detection on every tighter co-resident,
+and the domain-aware fix (per-domain $[\underline{L}_d,\overline{L}_d]$) removes the coupling term by
+construction, for any number of domains. The two-domain experiment instantiates a general
+containment condition rather than a single data point.
+
 \textbf{The fix needs no oracle tag.} To show the fix is deployable rather than dependent on a
 ground-truth domain label, we replace the oracle tag with the inferred router of
 Section~\ref{sec:da}, which reads each sequence's domain off its event-id block. Across five seeds
@@ -407,12 +429,42 @@ model forgets.
 
 The unifying picture is a $2\times2$ over
 \{simultaneous mixing, sequential arrival\}$\times$\{disjoint-range input, shared-representation
-input\}: only \emph{(sequential, shared representation)} fails, and it fails hard. Simultaneous
+input\} (Fig.~\ref{fig:map}): only \emph{(sequential, shared representation)} fails, and it fails hard. Simultaneous
 mixing is safe; it is sequential onboarding of a domain into a shared-representation model that is
 dangerous. This distinction, absent from prior work, explains why the reference's scalar-id
 DeepLog appears robust, and predicts that any semantics-based encoding (embeddings, template
 vectors, or LLM features), which necessarily shares feature space across domains, will require an
 explicit continual-learning defense~\cite{kirkpatrick2017overcoming,delange2022continual}.
+
+\textbf{Forgetting is directional.} A natural follow-up is whether the catastrophic cell is
+symmetric in arrival order. We reverse it---BGL first, then HDFS---and measure how much the earlier
+domain (now BGL) is retained, over three seeds (Table~\ref{tab:reverse}). It is \emph{not} symmetric:
+in the reverse order the embedding model does \emph{not} forget BGL---BGL $F_1$ actually rises from
+$0.649$ to $0.752$ (``forgetting'' $-0.103\pm0.006$), and the scalar input is likewise safe
+($-0.125\pm0.017$). So the failure is not merely \emph{(sequential, shared representation)} but
+specifically \emph{onboarding the broad-vocabulary domain (BGL, 394 events) after the narrow one
+(HDFS, 33 events)}: the larger new domain's training dominates the shared representation and overwrites
+the narrow region the earlier domain occupied, whereas the reverse---a small vocabulary arriving into a
+model that already spans a broad one---perturbs it little. This sharpens the map's failing cell into a
+concrete, testable direction rather than weakening it, and it warns that onboarding order is itself a
+deployment lever: where possible, introduce broad-vocabulary domains \emph{earlier}.
+
+\begin{table}[t]
+\caption{Arrival order is not symmetric. Reverse order (BGL$\rightarrow$HDFS) does not forget the
+earlier domain under either input; contrast the forward embedding case (HDFS$\rightarrow$BGL) that
+forgets $+0.665$. Mean $\pm$ std, $n=3$ seeds. Source: \texttt{results/h3\_reverse\_order.csv}.}
+\label{tab:reverse}
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Order / input & Earlier before & Earlier after & Forgetting \\
+\midrule
+HDFS$\rightarrow$BGL, embedding & 0.704 & $0.039\pm0.003$ & $+0.665\pm0.003$ \\
+BGL$\rightarrow$HDFS, embedding & 0.649 & $0.752\pm0.000$ & $-0.103\pm0.006$ \\
+BGL$\rightarrow$HDFS, scalar id & 0.627 & $0.752\pm0.000$ & $-0.125\pm0.017$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure}[t]
 \centering
@@ -421,6 +473,16 @@ explicit continual-learning defense~\cite{kirkpatrick2017overcoming,delange2022c
 representation makes domains share a feature space (embedding, orange: $0.70\!\rightarrow\!0.04$);
 the scalar-id encoding (blue) keeps them in disjoint ranges and no forgetting occurs.}
 \label{fig:mech}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{two_by_two_map.png}
+\caption{The $2\times2$ safety map summarizing H2, H3, and the mechanism experiment. Across
+\{arrival pattern\}$\times$\{input representation\}, only \emph{(sequential, shared representation)}
+fails; the other three regimes are safe. Values are the measured per-domain drop or forgetting. The
+failing cell is shown for the forward order HDFS$\rightarrow$BGL; it is directional (Table~\ref{tab:reverse}).}
+\label{fig:map}
 \end{figure}
 
 \section{Mitigation: Replay Restores the Forgotten Domain}\label{sec:replay}
@@ -434,8 +496,8 @@ $1\%$ regime); everything else---embedding input, rounds, seeds---is unchanged f
 Section~\ref{sec:mech}. Because replay stores raw sequences and not parameters, the model remains
 fixed-size.
 
-Table~\ref{tab:replay} reports the result over three seeds. Without replay the embedding model
-forgets HDFS ($F_1$ $0.70\!\rightarrow\!0.04$, forgetting $0.665\pm0.003$, reproducing
+Table~\ref{tab:replay} and Fig.~\ref{fig:replay} report the result over three seeds. Without replay
+the embedding model forgets HDFS ($F_1$ $0.70\!\rightarrow\!0.04$, forgetting $0.665\pm0.003$, reproducing
 Section~\ref{sec:mech}). A buffer of just $10\%$ ($\approx558$ sequences) \emph{eliminates}
 forgetting---HDFS returns to $0.700\pm0.004$, its pre-arrival level---while BGL is still learned
 ($0.722\pm0.052$), and a $25\%$ buffer is cleaner still (forgetting $0.001\pm0.001$, BGL
@@ -444,8 +506,42 @@ seeds, giving forgetting $0.440\pm0.308$), which delimits how small the buffer c
 the paper identifies is therefore real but remediable at negligible cost: a few hundred stored
 sequences, no architecture change, and no loss on the new domain. This makes the practitioner
 guidance concrete---if sequential onboarding into a shared-representation model is unavoidable,
-budget a small replay buffer---and leaves parameter-based defenses (EWC~\cite{kirkpatrick2017overcoming})
-as a memory-free alternative to compare in future work.
+budget a small replay buffer.
+
+\subsection{A memory-free alternative: EWC}\label{sec:ewc}
+Replay stores raw sequences of the earlier domain, which some deployments cannot do (data-retention
+limits, or a client that has left the federation). We therefore also evaluate the standard
+\emph{parameter-based}, memory-free defense---elastic weight consolidation
+(EWC)~\cite{kirkpatrick2017overcoming}---under the identical protocol. From the stage-1 HDFS model we
+estimate the empirical Fisher information $F_i$ of each weight on HDFS windows, then continue federated
+training on BGL with the penalty $(\lambda/2)\sum_i F_i(\theta_i-\theta_i^\ast)^2$ anchoring the
+HDFS-important weights $\theta^\ast$. Table~\ref{tab:ewc} sweeps $\lambda$ over three seeds. EWC
+\emph{does} remove the forgetting---at $\lambda{=}10^{8}$ it restores HDFS to $0.690\pm0.005$
+(forgetting $0.014\pm0.005$) while BGL is still learned ($0.752\pm0.052$), matching replay's outcome
+without storing any data. The catch is tuning: the penalty has no effect until $\lambda{=}10^{6}$ and
+only succeeds at $\lambda{=}10^{8}$, i.e.\ EWC must be tuned across six orders of magnitude, whereas
+replay works out of the box at a $10\%$ buffer. The practical takeaway is a genuine trade-off rather
+than a single winner: prefer replay when a small earlier-domain buffer is permissible (no tuning),
+and EWC when it is not (no storage, but a sensitive hyper-parameter to calibrate).
+
+\begin{table}[t]
+\caption{Memory-free EWC for embedding-DeepLog under sequential arrival (HDFS$\rightarrow$BGL),
+mean $\pm$ std over $n=3$ seeds. EWC removes the forgetting only at $\lambda{=}10^{8}$; smaller
+$\lambda$ barely helps. Source: \texttt{results/mitigation\_ewc.csv}.}
+\label{tab:ewc}
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+EWC $\lambda$ & HDFS $F_1$ after & BGL $F_1$ after & Forgetting \\
+\midrule
+$0$ (no defense) & $0.039\pm0.003$ & $0.642\pm0.028$ & $+0.665\pm0.003$ \\
+$10^{2}$         & $0.040\pm0.004$ & $0.649\pm0.019$ & $+0.664\pm0.004$ \\
+$10^{4}$         & $0.044\pm0.010$ & $0.651\pm0.015$ & $+0.659\pm0.010$ \\
+$10^{6}$         & $0.212\pm0.174$ & $0.663\pm0.047$ & $+0.491\pm0.174$ \\
+$10^{8}$         & $\mathbf{0.690\pm0.005}$ & $0.752\pm0.052$ & $\mathbf{+0.014\pm0.005}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{table}[t]
 \caption{Replay mitigation for embedding-DeepLog under sequential arrival (HDFS$\rightarrow$BGL),
@@ -466,6 +562,16 @@ $50\%$ (2791 seq)  & $0.694\pm0.014$ & $0.752\pm0.000$ & $+0.009\pm0.014$ \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{replay_mitigation.png}
+\caption{Replay mitigation: HDFS retention and BGL learning versus buffer size (mean $\pm$ std,
+three seeds). Without a buffer HDFS collapses to $0.04$; a $\ge10\%$ buffer restores it to its
+pre-arrival level (dashed) while BGL is still learned. The $5\%$ point is unreliable (large
+variance), which delimits the minimum useful buffer.}
+\label{fig:replay}
+\end{figure}
 
 \section{Does the Fix Lift the Full Ensemble?}\label{sec:ensemble}
 The reference's strongest HDFS method is the union ensemble Events\,$\lor$\,Length\,$\lor$\,ECVC.
@@ -548,12 +654,14 @@ domain-aware aggregation restores it to single-domain performance. Simultaneous 
 deep model is robust, but sequential onboarding into a shared-representation model forgets
 catastrophically (a danger the reference's scalar-id encoding happens to mask), while set-union
 detectors never forget but grow unbounded. The contribution is a reproducible account of how the
-failure depends jointly on the detection method, the arrival pattern, and the input representation,
-together with working fixes for both failing cases: a domain-aware aggregation that routes without an
-oracle tag, and a small replay buffer that removes the forgetting. Future work includes (i) a
-memory-free anti-forgetting defense (EWC~\cite{kirkpatrick2017overcoming}) compared against the replay
-buffer under a fixed storage budget; (ii) longer arrival sequences ($>2$ domains) where replay-buffer
-sizing and interference become harder; and (iii) additional domains to stress the map further.
+failure depends jointly on the detection method, the arrival pattern, the input representation, and the
+onboarding \emph{direction}, together with working fixes for both failing cases: a domain-aware
+aggregation that routes without an oracle tag, and---for the forgetting---both a small replay buffer and
+a memory-free EWC penalty, which we compare directly. Future work includes (i) longer arrival sequences
+($>2$ domains), where replay-buffer sizing, EWC $\lambda$ scheduling, and cross-domain interference
+compound; (ii) additional log domains (e.g., Thunderbird, Spirit) to stress the map beyond the two-domain
+containment condition; and (iii) automatic selection of the EWC penalty, whose six-order-of-magnitude
+sensitivity we document as its main practical drawback relative to replay.
 
 % -------------------------------------------------------------------------------------
 % References are embedded inline so the paper renders without a BibTeX pass.
