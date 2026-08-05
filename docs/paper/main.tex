@@ -655,10 +655,12 @@ predicted perfectly by the next-event model and are unrecoverable by any thresho
 value is consistent with its federated regime; the $\sim$0.93 figure is most plausibly the
 reference's centralized or best-tuned result. To test the capacity ceiling directly, we ran a
 standalone \emph{centralized} DeepLog on the \emph{full} HDFS normal set (all $558{,}223$ sequences,
-no federation, up to $100$ passes; \texttt{results/deeplog\_centralized\_hdfs.csv}). It likewise does
-not approach $0.93$: training loss plateaus at $\approx0.204$ by round $20$ and the transductive $F_1$
-peaks at $0.43$ (round $2$) before settling near $0.25$, with precision saturating at $\approx0.97$
-while recall stays below $0.30$. This confirms the ceiling is a property of the scalar-input
+$6.67$M training windows, no federation; \texttt{results/deeplog\_centralized\_hdfs.csv}). The run was
+budgeted for up to $100$ passes but had fully converged by round ${\sim}30$ and was stopped at $55$.
+It likewise does not approach $0.93$: training loss plateaus at $\approx0.204$ by round $20$
+(and drifts only to $0.203$ by round $55$), and the transductive $F_1$ peaks at $0.43$ (round $2$)
+before settling near $0.25$ (mean $0.257\pm0.016$ over rounds $10$--$55$), with precision saturating
+at $\approx0.98$ while recall never exceeds $0.29$. This confirms the ceiling is a property of the scalar-input
 next-event model and the top-$g$ rule, not an artifact of federation or of $1\%$ subsampling. We
 therefore do not claim to reproduce $0.93$, and all H2/H3 DeepLog numbers are the federated-$1\%$-data
 regime. Importantly, the H3 forgetting finding is a

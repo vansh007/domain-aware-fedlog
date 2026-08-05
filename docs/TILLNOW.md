@@ -15,6 +15,23 @@ Format for each entry:
 
 ---
 
+## 2026-08-05 (cont.) — Re-ran centralized DeepLog to completion (55 rounds)
+- Did: Re-ran `scripts/deeplog_centralized_hdfs.py` (full HDFS, 558,223 normal, 6.67M windows, no
+  FedAvg). Backed up the prior 29-row CSV first (results/deeplog_centralized_hdfs.csv.bak29). The
+  machine CPU-throttled mid-run (round 27 at 6.2h) then recovered; per user's call ("accept converged
+  run"), stopped it at round 55.
+- Found: Everything fine + more complete. Rounds 1-29 IDENTICAL to the backup (deterministic seed=0
+  -> exact reproduction). loss 0.349->0.203 (flat since ~r30); F1 best 0.4333@r2, mean(r10-55)
+  0.257+/-0.016; recall ALL <0.30 (max 0.290@r1); precision saturated ~0.986. Does NOT reach 0.93 —
+  the scalar-input + top-g capacity ceiling is re-confirmed over 55 rounds, not just 29. CSV now 55
+  rows (supersedes bak29; backup removed as redundant/verified).
+- Wired: paper Threats-to-Validity updated from "up to 100 passes" to the actual 55-round wording
+  (converged by ~r30, stopped at 55; precision ~0.98; recall never exceeds 0.29).
+- Next: verify citations; ieeeaccess.cls; compile. 3rd dataset still the open user decision.
+- Blocked on: Nothing.
+
+---
+
 ## 2026-08-05 (cont.) — Closed the domain-unknown routing open problem
 - Did: Implemented `predict_domain_unknown` in src/aggregation.py (was NotImplementedError stub)
   with TWO tag-free routing strategies + an `infer_domains` helper. NO MoE/adapter/ML router — the
