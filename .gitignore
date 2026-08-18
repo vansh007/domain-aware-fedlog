@@ -10,3 +10,7 @@ __pycache__/
 .DS_Store
 # local, machine-specific Claude Code settings
 .claude/settings.local.json
+# python packaging build artifacts
+*.egg-info/
+build/
+dist/

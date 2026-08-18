@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fedlog-audit"
+version = "0.1.0"
+description = "Pre-deployment safety auditor and domain-aware fixes for heterogeneous/evolving federated log anomaly detection."
+readme = "fedlog_audit/README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Vansh Mundhra" },
+    { name = "Pinak Debnath" },
+    { name = "Sankari M" },
+]
+keywords = ["federated-learning", "anomaly-detection", "log-analysis",
+            "catastrophic-forgetting", "domain-shift"]
+# The auditor core has ZERO third-party dependencies. The optional research/experiment
+# code (src/) pulls in numpy/torch/matplotlib; install those via requirements.txt.
+dependencies = []
+
+[project.optional-dependencies]
+research = ["numpy>=1.26", "torch>=2.2", "matplotlib>=3.7", "PyYAML>=6.0"]
+
+[project.scripts]
+fedlog-audit = "fedlog_audit.cli:main"
+
+[tool.setuptools]
+# Ship the auditor package plus the research code so both `import fedlog_audit` and the
+# convenience re-exports `from fedlog_audit import DomainAwareLength` work after install.
+packages = ["fedlog_audit", "src", "src.methods"]
