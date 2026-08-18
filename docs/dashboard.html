@@ -1,0 +1,620 @@
+<title>fedlog-audit</title>
+<style>
+  /* ---------- tokens: light (bare :root defines the complete palette) ---------- */
+  :root{
+    --bg:#e9edf1; --surface:#ffffff; --surface-2:#f4f7f9; --surface-3:#eef2f6;
+    --ink:#132030; --ink-2:#4a5b6e; --ink-3:#768899; --line:#d7dfe7; --line-2:#c3ced8;
+    --accent:#1c7293; --accent-2:#12586f; --accent-tint:#e2eef3;
+    --safe:#2e7d32; --safe-t:#e6f0e7;
+    --info:#3f6187; --info-t:#e6ecf3;
+    --low:#5d6b7a; --low-t:#e9edf1;
+    --medium:#b26a06; --medium-t:#f6ecdd;
+    --high:#c1440e; --high-t:#f7e6de;
+    --critical:#a3271a; --critical-t:#f6e0dc;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --shadow:0 1px 2px rgba(19,32,48,.06),0 6px 20px -8px rgba(19,32,48,.14);
+    --r:12px;
+  }
+  :root:not([data-theme="light"]){}
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0c141d; --surface:#141f2b; --surface-2:#18242f; --surface-3:#1d2a37;
+      --ink:#e7eef4; --ink-2:#9fb0c0; --ink-3:#6c8092; --line:#26343f; --line-2:#324352;
+      --accent:#43a8ca; --accent-2:#67c0dd; --accent-tint:#12303c;
+      --safe:#5bbd63; --safe-t:#13291a;
+      --info:#7ba0c9; --info-t:#152534;
+      --low:#8d9dad; --low-t:#1a2530;
+      --medium:#e0972f; --medium-t:#2e2413;
+      --high:#f0743f; --high-t:#331c12;
+      --critical:#f0685a; --critical-t:#33191a;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px -12px rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0c141d; --surface:#141f2b; --surface-2:#18242f; --surface-3:#1d2a37;
+    --ink:#e7eef4; --ink-2:#9fb0c0; --ink-3:#6c8092; --line:#26343f; --line-2:#324352;
+    --accent:#43a8ca; --accent-2:#67c0dd; --accent-tint:#12303c;
+    --safe:#5bbd63; --safe-t:#13291a;
+    --info:#7ba0c9; --info-t:#152534;
+    --low:#8d9dad; --low-t:#1a2530;
+    --medium:#e0972f; --medium-t:#2e2413;
+    --high:#f0743f; --high-t:#331c12;
+    --critical:#f0685a; --critical-t:#33191a;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px -12px rgba(0,0,0,.55);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--sans); line-height:1.55;
+    -webkit-font-smoothing:antialiased; font-variant-numeric:tabular-nums;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:clamp(20px,4vw,44px) clamp(16px,4vw,32px) 64px}
+  .mono{font-family:var(--mono)}
+  .eyebrow{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--accent-2); font-weight:600;
+  }
+  h1{font-size:clamp(30px,5vw,46px); line-height:1.02; margin:.28em 0 .12em; letter-spacing:-.02em; text-wrap:balance}
+  h1 .lock{font-weight:400; color:var(--ink-2)}
+  h2{font-size:19px; letter-spacing:-.01em; margin:0 0 2px}
+  .lede{color:var(--ink-2); font-size:16.5px; max-width:64ch; margin:.2em 0 0}
+  a{color:var(--accent-2)}
+
+  /* header verdict strip */
+  header{border-bottom:1px solid var(--line); padding-bottom:26px; margin-bottom:30px}
+  .hbar{display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-top:22px}
+  .verdict-pill{
+    display:inline-flex; align-items:center; gap:10px; padding:9px 15px; border-radius:999px;
+    font-family:var(--mono); font-weight:600; font-size:13px; letter-spacing:.04em;
+    background:var(--sev-t,var(--surface-2)); color:var(--sev,var(--ink));
+    border:1px solid color-mix(in srgb,var(--sev,var(--line)) 34%, transparent);
+  }
+  .verdict-pill .dot{width:9px;height:9px;border-radius:50%;background:var(--sev,var(--ink-3))}
+  .hbar .sub{color:var(--ink-2); font-size:14px}
+
+  /* layout */
+  .grid{display:grid; gap:22px}
+  @media(min-width:860px){ .console{grid-template-columns:minmax(0,340px) minmax(0,1fr)} }
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+    box-shadow:var(--shadow); padding:20px;
+  }
+  .card > .head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:16px}
+  .card .head .eyebrow{color:var(--ink-3)}
+
+  /* controls */
+  .field{margin-bottom:16px}
+  .field > label{display:block; font-family:var(--mono); font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--ink-3); margin-bottom:7px}
+  .seg{display:flex; background:var(--surface-3); border:1px solid var(--line); border-radius:9px; padding:3px; gap:3px}
+  .seg button{
+    flex:1; appearance:none; border:0; background:transparent; color:var(--ink-2);
+    font-family:var(--mono); font-size:12.5px; font-weight:600; padding:7px 6px; border-radius:6px;
+    cursor:pointer; transition:background .12s,color .12s; letter-spacing:.02em;
+  }
+  .seg button[aria-pressed="true"]{background:var(--accent); color:#fff; box-shadow:0 1px 2px rgba(0,0,0,.15)}
+  .seg button:disabled{opacity:.4; cursor:not-allowed}
+  .seg button:focus-visible{outline:2px solid var(--accent-2); outline-offset:1px}
+
+  .domains{display:flex; flex-direction:column; gap:12px}
+  .dom{border:1px solid var(--line); border-radius:10px; padding:12px 13px; background:var(--surface-2)}
+  .dom .top{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px}
+  .dom .nm{font-family:var(--mono); font-weight:700; font-size:13.5px}
+  .dom .tag{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-3); padding:2px 7px; border:1px solid var(--line-2); border-radius:999px}
+  .lenrow{display:flex; align-items:center; gap:8px}
+  .lenrow label{font-family:var(--mono); font-size:11px; color:var(--ink-3); min-width:74px}
+  .lenrow input{
+    width:100%; font-family:var(--mono); font-size:13px; color:var(--ink);
+    background:var(--surface); border:1px solid var(--line-2); border-radius:7px; padding:6px 8px;
+  }
+  .lenrow input:focus-visible{outline:2px solid var(--accent-2); outline-offset:0}
+  .swap{margin-top:2px}
+  .swap button{
+    width:100%; appearance:none; cursor:pointer; font-family:var(--mono); font-size:12px; font-weight:600;
+    color:var(--accent-2); background:var(--accent-tint); border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
+    border-radius:8px; padding:8px; letter-spacing:.03em;
+  }
+  .swap button:focus-visible{outline:2px solid var(--accent-2); outline-offset:1px}
+
+  /* verdict / risks */
+  .overall{display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:10px;
+    background:var(--sev-t); border:1px solid color-mix(in srgb,var(--sev) 30%,transparent); margin-bottom:16px}
+  .overall .big{font-family:var(--mono); font-weight:700; font-size:15px; color:var(--sev); letter-spacing:.03em}
+  .overall .txt{font-size:13.5px; color:var(--ink-2)}
+  .risks{display:flex; flex-direction:column; gap:11px}
+  .risk{position:relative; border:1px solid var(--line); border-radius:10px; padding:13px 15px 13px 18px;
+    background:var(--surface-2); overflow:hidden}
+  .risk::before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--sev,var(--line-2))}
+  .risk .rh{display:flex; align-items:center; gap:9px; margin-bottom:5px; flex-wrap:wrap}
+  .risk .rname{font-weight:650; font-size:14.5px}
+  .chip{font-family:var(--mono); font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    padding:2px 8px; border-radius:999px; color:var(--sev); background:var(--sev-t);
+    border:1px solid color-mix(in srgb,var(--sev) 34%,transparent)}
+  .risk .finding{font-size:13.5px; color:var(--ink); margin:2px 0 7px}
+  .risk .fix{font-size:13px; color:var(--ink-2)}
+  .risk .fix b{color:var(--ink); font-weight:650}
+  .risk .basis{font-family:var(--mono); font-size:11.5px; color:var(--ink-3); margin-top:7px; padding-top:7px;
+    border-top:1px dashed var(--line-2)}
+
+  .lv-safe{--sev:var(--safe); --sev-t:var(--safe-t)}
+  .lv-info{--sev:var(--info); --sev-t:var(--info-t)}
+  .lv-low{--sev:var(--low); --sev-t:var(--low-t)}
+  .lv-medium{--sev:var(--medium); --sev-t:var(--medium-t)}
+  .lv-high{--sev:var(--high); --sev-t:var(--high-t)}
+  .lv-critical{--sev:var(--critical); --sev-t:var(--critical-t)}
+
+  /* section spacing */
+  section.block{margin-top:34px}
+  .section-head{margin-bottom:16px}
+
+  /* 2x2 map */
+  .map{display:grid; grid-template-columns:auto 1fr 1fr; grid-template-rows:auto 1fr 1fr auto; gap:8px}
+  .map .axis-y{grid-row:2/4; grid-column:1; writing-mode:vertical-rl; transform:rotate(180deg);
+    display:flex; align-items:center; justify-content:center; font-family:var(--mono);
+    font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3)}
+  .map .ylab{font-family:var(--mono); font-size:11px; color:var(--ink-2); display:flex; align-items:center; justify-content:flex-end; padding-right:6px; text-align:right}
+  .map .colhead{font-family:var(--mono); font-size:11.5px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--ink-2); text-align:center; padding-bottom:2px}
+  .map .axis-x{grid-column:2/4; text-align:center; font-family:var(--mono); font-size:11px;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); padding-top:4px}
+  .cell{border:1px solid var(--line); border-radius:10px; padding:16px 14px; min-height:104px;
+    display:flex; flex-direction:column; gap:6px; justify-content:center; background:var(--surface-2);
+    transition:transform .14s, box-shadow .14s, border-color .14s}
+  .cell .v{font-family:var(--mono); font-weight:700; font-size:14px; letter-spacing:.04em; display:flex; align-items:center; gap:7px}
+  .cell .d{font-size:12.5px; color:var(--ink-2)}
+  .cell.safe{--c:var(--safe)} .cell.fail{--c:var(--critical)}
+  .cell .v{color:var(--c)}
+  .cell.fail{background:var(--critical-t); border-color:color-mix(in srgb,var(--critical) 34%,transparent)}
+  .cell.safe{background:var(--safe-t); border-color:color-mix(in srgb,var(--safe) 22%,transparent)}
+  .cell.active{transform:translateY(-2px); box-shadow:0 0 0 2px var(--accent), var(--shadow); border-color:var(--accent)}
+  .map.dim .cell:not(.active){opacity:.5}
+
+  /* containment visualizer */
+  .viz .axis{position:relative; height:20px; margin:0 0 4px}
+  .viz .axis .tick{position:absolute; top:0; font-family:var(--mono); font-size:10.5px; color:var(--ink-3); transform:translateX(-50%)}
+  .track{position:relative; height:34px; margin:9px 0; border-radius:7px; background:var(--surface-3); border:1px solid var(--line)}
+  .track .lab{position:absolute; left:8px; top:50%; transform:translateY(-50%); font-family:var(--mono);
+    font-size:11px; color:var(--ink-2); z-index:3; letter-spacing:.03em}
+  .bar{position:absolute; top:4px; bottom:4px; border-radius:5px; background:color-mix(in srgb,var(--accent) 30%,transparent);
+    border:1px solid var(--accent)}
+  .bar.bgl{background:color-mix(in srgb,var(--medium) 24%,transparent); border-color:var(--medium)}
+  .bar.global{background:color-mix(in srgb,var(--low) 18%,transparent); border-color:var(--low-2,var(--low))}
+  .blind{position:absolute; top:4px; bottom:4px; z-index:2;
+    background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--critical) 42%,transparent) 0 6px,transparent 6px 12px);
+    border-left:1px dashed var(--critical); border-right:1px dashed var(--critical)}
+  .viz .legend{display:flex; flex-wrap:wrap; gap:14px; margin-top:12px; font-size:12.5px; color:var(--ink-2)}
+  .viz .legend span{display:inline-flex; align-items:center; gap:6px}
+  .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .viz .callout{margin-top:12px; font-size:13px; color:var(--ink); padding:11px 13px; border-radius:9px;
+    background:var(--surface-2); border:1px solid var(--line)}
+  .viz .callout.bad{background:var(--critical-t); border-color:color-mix(in srgb,var(--critical) 30%,transparent)}
+  .viz .callout.ok{background:var(--safe-t); border-color:color-mix(in srgb,var(--safe) 24%,transparent)}
+  .viz .callout b{font-family:var(--mono)}
+
+  /* evidence ledger */
+  .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:var(--r)}
+  table{border-collapse:collapse; width:100%; font-size:13.5px; min-width:540px}
+  thead th{font-family:var(--mono); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3);
+    text-align:left; padding:11px 15px; border-bottom:1px solid var(--line-2); background:var(--surface-2)}
+  tbody td{padding:11px 15px; border-bottom:1px solid var(--line); color:var(--ink)}
+  tbody tr:last-child td{border-bottom:0}
+  tbody td.num{font-family:var(--mono); white-space:nowrap}
+  .delta-bad{color:var(--high); font-weight:650}
+  .delta-good{color:var(--safe); font-weight:650}
+
+  .note{font-size:12.5px; color:var(--ink-3); margin-top:10px}
+  footer{margin-top:44px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3); font-size:12.5px}
+  footer code{font-family:var(--mono); color:var(--ink-2)}
+
+  .toggle-theme{position:fixed; top:14px; right:14px; z-index:20; appearance:none; cursor:pointer;
+    font-family:var(--mono); font-size:11px; letter-spacing:.06em; color:var(--ink-2);
+    background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:7px 12px; box-shadow:var(--shadow)}
+  .toggle-theme:focus-visible{outline:2px solid var(--accent-2); outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<button class="toggle-theme" id="themeBtn" aria-label="Toggle color theme">◐ theme</button>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Pre-deployment audit · federated log anomaly detection</div>
+    <h1>fedlog-audit</h1>
+    <p class="lede">Before you train, check whether your federation will hit a known failure.
+      This console runs the audit from <b>summary statistics alone</b> — each domain's event-id
+      block and normal-length range — the same aggregates a client can share without exposing a
+      single raw log line. Change the scenario; the verdict, the map, and the mechanism update live.</p>
+    <div class="hbar">
+      <span class="verdict-pill" id="hpill"><span class="dot"></span><span id="hpillTxt">—</span></span>
+      <span class="sub" id="hsub">Adjust the scenario to see the worst risk.</span>
+    </div>
+  </header>
+
+  <!-- ============ CONSOLE ============ -->
+  <div class="grid console">
+    <!-- controls -->
+    <div class="card" id="controls">
+      <div class="head"><div class="eyebrow">Scenario</div></div>
+
+      <div class="field">
+        <label>Detector family</label>
+        <div class="seg" id="detector" role="group" aria-label="Detector family">
+          <button data-v="lightweight" aria-pressed="true">Lightweight</button>
+          <button data-v="deep">Deep (DeepLog)</button>
+          <button data-v="ensemble">Ensemble</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Arrival pattern</label>
+        <div class="seg" id="arrival" role="group" aria-label="Arrival pattern">
+          <button data-v="simultaneous" aria-pressed="true">Simultaneous</button>
+          <button data-v="sequential">Sequential</button>
+        </div>
+      </div>
+
+      <div class="field" id="reprField">
+        <label>Input representation <span style="color:var(--ink-3)">(deep only)</span></label>
+        <div class="seg" id="representation" role="group" aria-label="Input representation">
+          <button data-v="scalar" aria-pressed="true">Scalar id</button>
+          <button data-v="embedding">Embedding</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Domains &amp; normal-length ranges</label>
+        <div class="domains">
+          <div class="dom">
+            <div class="top"><span class="nm" id="nmA">hdfs</span><span class="tag" id="tagA">ids 0–33 · vocab 33</span></div>
+            <div class="lenrow"><label>len min–max</label>
+              <input id="aMin" type="number" value="4" min="0" aria-label="hdfs min length">
+              <input id="aMax" type="number" value="300" min="1" aria-label="hdfs max length"></div>
+          </div>
+          <div class="dom">
+            <div class="top"><span class="nm" id="nmB">bgl</span><span class="tag" id="tagB">ids 33–427 · vocab 394</span></div>
+            <div class="lenrow"><label>len min–max</label>
+              <input id="bMin" type="number" value="1" min="0" aria-label="bgl min length">
+              <input id="bMax" type="number" value="900" min="1" aria-label="bgl max length"></div>
+          </div>
+          <div class="swap"><button id="swapBtn">⇅ arrival order: <span id="orderTxt">hdfs → bgl</span></button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- verdict -->
+    <div class="card" id="verdict">
+      <div class="head"><div class="eyebrow">Audit result</div><div class="eyebrow mono" id="cellTxt"></div></div>
+      <div class="overall" id="overall">
+        <span class="big" id="overallBig">—</span>
+        <span class="txt" id="overallTxt"></span>
+      </div>
+      <div class="risks" id="risks"></div>
+    </div>
+  </div>
+
+  <!-- ============ 2x2 MAP ============ -->
+  <section class="block">
+    <div class="section-head">
+      <h2>The 2×2 safety map</h2>
+      <p class="lede" style="font-size:15px">For a deep model, whether it fails is decided by two axes.
+        Exactly one of four regimes breaks — and it breaks hard. The active cell tracks your scenario.</p>
+    </div>
+    <div class="card">
+      <div class="map" id="map">
+        <div class="ylab" style="grid-row:2;grid-column:1">embedding<br><span style="color:var(--ink-3)">shared space</span></div>
+        <div class="ylab" style="grid-row:3;grid-column:1">scalar id<br><span style="color:var(--ink-3)">disjoint</span></div>
+        <div class="colhead" style="grid-row:1;grid-column:2">Simultaneous</div>
+        <div class="colhead" style="grid-row:1;grid-column:3">Sequential</div>
+        <div class="cell safe" data-arr="simultaneous" data-rep="embedding" style="grid-row:2;grid-column:2">
+          <span class="v">✓ SAFE</span><span class="d">HDFS drop −0.003</span></div>
+        <div class="cell fail" data-arr="sequential" data-rep="embedding" style="grid-row:2;grid-column:3">
+          <span class="v">✕ FAILS</span><span class="d">forgetting <b>+0.665</b> · HDFS 0.70→0.04</span></div>
+        <div class="cell safe" data-arr="simultaneous" data-rep="scalar" style="grid-row:3;grid-column:2">
+          <span class="v">✓ SAFE</span><span class="d">HDFS drop +0.0002</span></div>
+        <div class="cell safe" data-arr="sequential" data-rep="scalar" style="grid-row:3;grid-column:3">
+          <span class="v">✓ SAFE</span><span class="d">forgetting 0.000</span></div>
+        <div class="axis-x" style="grid-row:4;grid-column:2/4">arrival pattern →</div>
+      </div>
+      <p class="note" id="mapNote"></p>
+    </div>
+  </section>
+
+  <!-- ============ CONTAINMENT VISUALIZER ============ -->
+  <section class="block">
+    <div class="section-head">
+      <h2>Why range aggregation collapses</h2>
+      <p class="lede" style="font-size:15px">Domain-blind Length keeps one global <span class="mono">[min,max]</span>
+        over every client. A broad domain stretches that band until the tight domain's anomalies fit
+        inside it — and are never flagged. Edit the ranges on the left to watch the blind spot grow.</p>
+    </div>
+    <div class="card viz">
+      <div class="axis" id="vizAxis"></div>
+      <div class="track"><span class="lab" id="lblA">hdfs normal</span><div class="bar" id="barA"></div></div>
+      <div class="track"><span class="lab" id="lblB">bgl normal</span><div class="bar bgl" id="barB"></div></div>
+      <div class="track"><span class="lab">global range (domain-blind)</span><div class="bar global" id="barG"></div><div class="blind" id="blind"></div></div>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--accent)"></span>tight domain</span>
+        <span><span class="sw" style="background:var(--medium)"></span>broad domain</span>
+        <span><span class="sw" style="background:repeating-linear-gradient(45deg,var(--critical) 0 4px,transparent 4px 8px)"></span>blind spot — anomalies hidden here</span>
+      </div>
+      <div class="callout bad" id="vizCall"></div>
+    </div>
+  </section>
+
+  <!-- ============ EVIDENCE LEDGER ============ -->
+  <section class="block">
+    <div class="section-head">
+      <h2>Evidence ledger</h2>
+      <p class="lede" style="font-size:15px">Every rule above traces to a measured result. Numbers are
+        mean over 3–5 seeds on the HDFS + BGL benchmarks.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Finding</th><th>Condition</th><th>Result</th><th>Fix → after</th></tr></thead>
+        <tbody>
+          <tr><td>H1 · range collapse</td><td>mixed lightweight Length</td>
+            <td class="num">F1 0.538 → <span class="delta-bad">0.000</span></td><td class="num">domain-aware → 0.561</td></tr>
+          <tr><td>Tag-free routing</td><td>disjoint vocabularies</td>
+            <td class="num">vocab-block == oracle</td><td class="num">acc 1.000, 0 unknown</td></tr>
+          <tr><td>H2 · simultaneous mix</td><td>deep FedAvg, both inputs</td>
+            <td class="num"><span class="delta-good">no degradation</span></td><td class="num">HDFS +0.0002; BGL improves</td></tr>
+          <tr><td>H3 · forgetting</td><td>deep, sequential, embedding</td>
+            <td class="num delta-bad">+0.665 (0.70→0.04)</td><td class="num">replay 10% → +0.004</td></tr>
+          <tr><td>Directionality</td><td>reverse: broad→narrow</td>
+            <td class="num"><span class="delta-good">−0.103</span> (no forget)</td><td class="num">order broad-first</td></tr>
+          <tr><td>EWC (memory-free)</td><td>λ sweep</td>
+            <td class="num">works at λ=10⁸</td><td class="num">forget +0.014</td></tr>
+          <tr><td>C2 · set-union growth</td><td>sequential arrival</td>
+            <td class="num delta-bad">×3.7 size</td><td class="num">1,688 → 6,300 B</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <b style="color:var(--ink-2)">fedlog-audit</b> · companion to <i>“Domain-Aware Federated Log Anomaly
+    Detection under Heterogeneous and Sequentially Arriving Domains.”</i>
+    The same logic ships as a Python package + CLI (<code>fedlog-audit --example</code>). Every number
+    traces to a run in <code>results/</code>; the auditor uses summary statistics only — no raw logs.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  // ---------- state ----------
+  var S = {detector:"lightweight", arrival:"simultaneous", representation:"scalar",
+           order:["hdfs","bgl"],
+           A:{name:"hdfs", id:[0,33]}, B:{name:"bgl", id:[33,427]}};
+  var $ = function(id){return document.getElementById(id);};
+  function num(id,d){var v=parseFloat($(id).value); return isNaN(v)?d:v;}
+
+  // ---------- auditor (faithful JS port of fedlog_audit/auditor.py) ----------
+  var RANK={SAFE:0,INFO:1,LOW:2,MEDIUM:3,HIGH:4,CRITICAL:5};
+  function specs(){
+    return [
+      {name:S.A.name, id:S.A.id, len:[num("aMin",0),num("aMax",1)], vocab:S.A.id[1]-S.A.id[0]},
+      {name:S.B.name, id:S.B.id, len:[num("bMin",0),num("bMax",1)], vocab:S.B.id[1]-S.B.id[0]}
+    ];
+  }
+  function auditLength(ds,det){
+    if(det==="deep") return {name:"Range aggregation (Length)",level:"SAFE",
+      finding:"Deep detector does not use a global length range.",fix:"n/a",basis:""};
+    var gmin=Math.min.apply(null,ds.map(function(d){return d.len[0];}));
+    var gmax=Math.max.apply(null,ds.map(function(d){return d.len[1];}));
+    var victims=ds.filter(function(d){return gmin<d.len[0]||gmax>d.len[1];});
+    if(!victims.length) return {name:"Range aggregation (Length)",level:"SAFE",
+      finding:"All domains share the same length band; the global range adds no blind spot.",
+      fix:"Per-domain ranges still recommended for robustness.",basis:""};
+    var worst=victims.slice().sort(function(a,b){return ratio(b)-ratio(a);})[0];
+    function ratio(d){return (gmax-gmin)/Math.max(1,d.len[1]-d.len[0]);}
+    var r=ratio(worst), level = r>=5?"CRITICAL":r>=2?"HIGH":"MEDIUM", note="";
+    if(det==="ensemble"){level="LOW";
+      note=" In a full Events∨Length∨ECVC ensemble this is masked by ECVC (ensemble F1 unchanged) — but a lightweight-only Length/Events deployment collapses.";}
+    return {name:"Range aggregation (Length)",level:level,
+      finding:"Global length range ["+gmin+","+gmax+"] is ~"+r.toFixed(1)+"× wider than "+worst.name+
+        "'s own ["+worst.len[0]+","+worst.len[1]+"]; "+victims.map(function(d){return d.name;}).join(", ")+
+        " anomalies fall inside the global band and are missed."+note,
+      fix:"Aggregate a <b>separate [min,max] per domain</b> and route each sequence to its domain's range.",
+      basis:"H1: HDFS Length F1 0.538 → 0.000 (blind) → 0.561 (domain-aware), 5 seeds."};
+  }
+  function auditRouting(ds){
+    var b=ds.map(function(d){return {lo:d.id[0],hi:d.id[1],n:d.name};}).sort(function(x,y){return x.lo-y.lo;});
+    var ov=[]; for(var i=1;i<b.length;i++){ if(b[i].lo<b[i-1].hi) ov.push(b[i-1].n+"∩"+b[i].n); }
+    if(!ov.length) return {name:"Tag-free routing",level:"SAFE",
+      finding:"Domain id-blocks are disjoint, so vocabulary-block routing recovers each sequence's domain exactly — no manual domain tag needed.",
+      fix:"Use <b>vocab-block routing</b> (majority event-id block); flag ids outside all blocks as anomalous.",
+      basis:"Routing: vocab-block == oracle exactly, accuracy 1.000, 5 seeds."};
+    return {name:"Tag-free routing",level:"MEDIUM",
+      finding:"Domain vocabularies OVERLAP ("+ov.join(", ")+"); the event id no longer identifies the domain uniquely.",
+      fix:"Provide a domain tag or resolve the overlap; ML-free block routing is exact only for disjoint vocabularies.",
+      basis:"Overlapping vocabularies are the paper's stated open/future-work case."};
+  }
+  function auditSize(ds,arr,det){
+    if(det==="deep") return {name:"Bounded model size",level:"SAFE",
+      finding:"Deep model is fixed-size; it does not grow as domains arrive.",fix:"n/a",basis:""};
+    var tot=ds.reduce(function(s,d){return s+d.vocab;},0);
+    if(arr==="simultaneous") return {name:"Bounded model size",level:"INFO",
+      finding:"Set-union state holds the union of all vocabularies ("+tot+" events). Fixed here because the domain set is fixed.",
+      fix:"Fine for a fixed federation; watch growth if domains will be added later.",
+      basis:"H3: set-union grows ×3.7 (1,688 → 6,300 B) when a domain is added."};
+    return {name:"Bounded model size",level:"MEDIUM",
+      finding:"Under sequential/evolving arrival the set-union (Known-Events) state grows with every new vocabulary ("+tot+" events now) and is UNBOUNDED on an open stream — contradicting the bounded-size property.",
+      fix:"Cap/prune the event set, or use a fixed-size model, if domains keep arriving.",
+      basis:"H3: set-union grew ×3.7 (1,688 → 6,300 B) for one added domain."};
+  }
+  function auditForget(ds,arr,rep,det,order){
+    if(det!=="deep") return {name:"Catastrophic forgetting",level:"SAFE",
+      finding:"Lightweight set/range detectors do not forget (aggregation is monotone).",fix:"n/a",basis:""};
+    if(arr==="simultaneous") return {name:"Catastrophic forgetting",level:"SAFE",
+      finding:"Simultaneous mixed FedAvg does not degrade the deep model; every round sees all domains.",
+      fix:"Prefer simultaneous onboarding when possible.",
+      basis:"H2: HDFS drop +0.0002; BGL even improves; holds under embeddings too."};
+    if(rep==="scalar") return {name:"Catastrophic forgetting",level:"SAFE",
+      finding:"Scalar-id input keeps domains in disjoint input ranges, so continued training on a new domain barely perturbs the earlier one.",
+      fix:"Safe as-is — though this is exactly what masks the risk in the reference's encoding.",
+      basis:"H3 (scalar): forgetting 0.000."};
+    var by={}; ds.forEach(function(d){by[d.name]=d;});
+    var bad=null;
+    for(var i=0;i<order.length;i++){ for(var j=0;j<i;j++){
+      var later=by[order[i]], earlier=by[order[j]];
+      if(later&&earlier&&later.vocab>earlier.vocab){bad=[earlier,later];break;}
+    } if(bad)break; }
+    if(bad) return {name:"Catastrophic forgetting",level:"CRITICAL",
+      finding:"Shared (embedding) representation + sequential arrival + a BROAD domain '"+bad[1].name+"' (vocab "+bad[1].vocab+") onboarded after the NARROW '"+bad[0].name+"' (vocab "+bad[0].vocab+"): '"+bad[0].name+"' will be catastrophically forgotten.",
+      fix:"Budget a <b>replay buffer ≥10%</b> of the earlier domain (tuning-free), or use EWC (memory-free but needs a large, carefully-tuned penalty).",
+      basis:"H3 (embedding): forgetting +0.665, HDFS 0.70→0.04. Replay 10% → +0.004; EWC works only at λ=10⁸."};
+    return {name:"Catastrophic forgetting",level:"LOW",
+      finding:"Shared representation under sequential arrival, but domains arrive narrow-after-broad; forgetting is directional and this direction is safe.",
+      fix:"Low risk — keep a small replay buffer as insurance if ordering may change.",
+      basis:"Reverse order (broad-first): forgetting −0.103 (earlier domain not forgotten)."};
+  }
+  function audit(){
+    var ds=specs();
+    var risks=[auditLength(ds,S.detector),auditRouting(ds),
+               auditSize(ds,S.arrival,S.detector),
+               auditForget(ds,S.arrival,S.representation,S.detector,S.order)];
+    var worst=risks.reduce(function(w,r){return RANK[r.level]>RANK[w]?r.level:w;},"SAFE");
+    var cell;
+    if(S.detector==="deep"){var sh=S.representation==="embedding",sq=S.arrival==="sequential";
+      cell=sq&&sh?"(sequential, shared) — the FAILING cell":"("+S.arrival+", "+(sh?"shared":"disjoint")+") — safe";}
+    else cell="lightweight family — H1 collapse / set-union growth axis";
+    return {risks:risks,worst:worst,cell:cell};
+  }
+
+  // ---------- rendering ----------
+  var LVCLASS={SAFE:"lv-safe",INFO:"lv-info",LOW:"lv-low",MEDIUM:"lv-medium",HIGH:"lv-high",CRITICAL:"lv-critical"};
+  var OVER={SAFE:"No known failure modes for this configuration.",
+    INFO:"Deployable; one item to keep an eye on.",
+    LOW:"Deployable; a minor, directional risk.",
+    MEDIUM:"Deployable with a fix — do not ship as-is.",
+    HIGH:"Will fail as-is. Apply the prescribed fix.",
+    CRITICAL:"Will fail catastrophically. Apply the prescribed fix."};
+  function esc(s){return s;}
+  function render(){
+    var r=audit();
+    // header + overall
+    $("hpillTxt").textContent="WORST: "+r.worst;
+    var pill=$("hpill"); pill.className="verdict-pill "+LVCLASS[r.worst];
+    pill.style.setProperty("--sev","var("+sevVar(r.worst)+")");
+    pill.style.setProperty("--sev-t","var("+sevVar(r.worst)+"-t)");
+    $("hsub").textContent=OVER[r.worst];
+    $("cellTxt").textContent=r.cell;
+    var ov=$("overall"); ov.className="overall "+LVCLASS[r.worst];
+    $("overallBig").textContent=r.worst;
+    $("overallTxt").textContent=OVER[r.worst];
+
+    // risk cards (sorted worst-first)
+    var sorted=r.risks.slice().sort(function(a,b){return RANK[b.level]-RANK[a.level];});
+    $("risks").innerHTML=sorted.map(function(x){
+      return '<div class="risk '+LVCLASS[x.level]+'">'
+        +'<div class="rh"><span class="rname">'+x.name+'</span><span class="chip">'+x.level+'</span></div>'
+        +'<div class="finding">'+x.finding+'</div>'
+        +'<div class="fix">→ '+x.fix+'</div>'
+        +(x.basis?'<div class="basis">'+x.basis+'</div>':'')+'</div>';
+    }).join("");
+
+    renderMap();
+    renderViz();
+  }
+  function sevVar(l){return {SAFE:"--safe",INFO:"--info",LOW:"--low",MEDIUM:"--medium",HIGH:"--high",CRITICAL:"--critical"}[l];}
+
+  function renderMap(){
+    var deep=S.detector==="deep";
+    var map=$("map"); map.classList.toggle("dim",!deep);
+    var cells=map.querySelectorAll(".cell");
+    cells.forEach(function(c){
+      var on = deep && c.getAttribute("data-arr")===S.arrival && c.getAttribute("data-rep")===S.representation;
+      c.classList.toggle("active",on);
+    });
+    $("mapNote").textContent = deep
+      ? "Active cell = your scenario. Only (sequential, embedding) fails — and only broad-after-narrow (see order)."
+      : "The 2×2 governs the deep model. For lightweight detectors the risks are H1 range-collapse and set-union growth (above).";
+  }
+
+  function renderViz(){
+    var a=[num("aMin",0),num("aMax",1)], b=[num("bMin",0),num("bMax",1)];
+    var gmin=Math.min(a[0],b[0]), gmax=Math.max(a[1],b[1]);
+    var lo=0, hi=Math.max(gmax,1)*1.02;
+    function pct(x){return ((x-lo)/(hi-lo)*100);}
+    // axis ticks
+    var ax=$("vizAxis"); ax.innerHTML="";
+    for(var t=0;t<=4;t++){var val=Math.round(hi*t/4);
+      var el=document.createElement("span"); el.className="tick"; el.style.left=pct(val)+"%"; el.textContent=val;
+      ax.appendChild(el);}
+    place("barA",a[0],a[1],pct); place("barB",b[0],b[1],pct); place("barG",gmin,gmax,pct);
+    $("lblA").textContent=S.A.name+" normal"; $("lblB").textContent=S.B.name+" normal";
+    // blind spot: the tighter domain's out-of-range region that still falls inside the global range.
+    // tight = smaller own span
+    var tight = (a[1]-a[0])<=(b[1]-b[0]) ? {n:S.A.name,r:a} : {n:S.B.name,r:b};
+    var hiBlindLo=tight.r[1], hiBlindHi=gmax;         // lengths just above the tight max, still inside global
+    var loBlindLo=gmin, loBlindHi=tight.r[0];         // lengths just below the tight min, still inside global
+    var span=(hiBlindHi-hiBlindLo)+Math.max(0,loBlindHi-loBlindLo);
+    var blind=$("blind");
+    if(span>0.5){
+      // show the larger blind band (usually the high side)
+      var useHi=(hiBlindHi-hiBlindLo)>=(loBlindHi-loBlindLo);
+      var blo=useHi?hiBlindLo:loBlindLo, bhi=useHi?hiBlindHi:loBlindHi;
+      blind.style.display="block"; blind.style.left=pct(blo)+"%"; blind.style.width=(pct(bhi)-pct(blo))+"%";
+      $("vizCall").className="callout bad";
+      $("vizCall").innerHTML="Blind spot: any <b>"+tight.n+"</b> anomaly of length "+Math.round(blo)+"–"+Math.round(bhi)+
+        " sits inside the global band <b>["+Math.round(gmin)+","+Math.round(gmax)+"]</b> and is never flagged. "+
+        "Domain-aware per-domain ranges remove it.";
+    } else {
+      blind.style.display="none";
+      $("vizCall").className="callout ok";
+      $("vizCall").innerHTML="No blind spot: the domains share a length band, so the global range hides nothing. "+
+        "Per-domain ranges are still the safe default.";
+    }
+  }
+  function place(id,x0,x1,pct){var el=$(id); el.style.left=pct(x0)+"%"; el.style.width=Math.max(0,pct(x1)-pct(x0))+"%";}
+
+  // ---------- interactions ----------
+  function seg(groupId,key,after){
+    $(groupId).addEventListener("click",function(e){
+      var btn=e.target.closest("button"); if(!btn||btn.disabled) return;
+      Array.prototype.forEach.call(this.querySelectorAll("button"),function(b){b.setAttribute("aria-pressed", b===btn?"true":"false");});
+      S[key]=btn.getAttribute("data-v"); if(after)after(); render();
+    });
+  }
+  seg("detector","detector",syncEnable);
+  seg("arrival","arrival",syncEnable);
+  seg("representation","representation");
+  function syncEnable(){
+    var deep=S.detector==="deep";
+    Array.prototype.forEach.call($("representation").querySelectorAll("button"),function(b){b.disabled=!deep;});
+    $("reprField").style.opacity=deep?"1":".5";
+    var seq=S.arrival==="sequential";
+    $("swapBtn").disabled=!seq; $("swapBtn").parentElement.style.opacity=seq?"1":".55";
+  }
+  $("swapBtn").addEventListener("click",function(){
+    S.order=[S.order[1],S.order[0]];
+    // swap the A/B domain identities so the viz + labels follow the order too
+    var t=S.A; S.A=S.B; S.B=t;
+    swapInputs();
+    $("orderTxt").textContent=S.order[0]+" → "+S.order[1];
+    render();
+  });
+  function swapInputs(){
+    // swap the numeric inputs and id tags to match A/B swap
+    var aMin=$("aMin").value,aMax=$("aMax").value,bMin=$("bMin").value,bMax=$("bMax").value;
+    $("aMin").value=bMin; $("aMax").value=bMax; $("bMin").value=aMin; $("bMax").value=aMax;
+    $("nmA").textContent=S.A.name; $("nmB").textContent=S.B.name;
+    $("tagA").textContent="ids "+S.A.id[0]+"–"+S.A.id[1]+" · vocab "+(S.A.id[1]-S.A.id[0]);
+    $("tagB").textContent="ids "+S.B.id[0]+"–"+S.B.id[1]+" · vocab "+(S.B.id[1]-S.B.id[0]);
+  }
+  ["aMin","aMax","bMin","bMax"].forEach(function(id){$(id).addEventListener("input",render);});
+
+  // theme toggle (light <-> dark, overrides system)
+  $("themeBtn").addEventListener("click",function(){
+    var cur=document.documentElement.getAttribute("data-theme");
+    var next = cur==="dark" ? "light" : cur==="light" ? "dark"
+             : (matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
+    document.documentElement.setAttribute("data-theme",next);
+  });
+
+  syncEnable(); render();
+})();
+</script>

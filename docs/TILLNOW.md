@@ -32,6 +32,31 @@ Format for each entry:
 
 ---
 
+## 2026-08-05 (cont.) — Built the fedlog-audit framework + interactive dashboard
+- Did: Productized the paper into (1) an installable Python package and (2) a self-contained
+  web dashboard, per user request ("both").
+  1. FRAMEWORK `fedlog_audit/` (pip install -e .): auditor.py is a pure-Python (zero-dep)
+     pre-deployment safety auditor that, from SUMMARY STATS ONLY (each domain's id-block +
+     normal-length range, no raw logs), flags which of the paper's failure modes a planned
+     federation will hit and prescribes the fix. cli.py = `fedlog-audit` CLI (--example / --domain
+     specs; exits non-zero on HIGH/CRITICAL so it can gate a pipeline). __init__ re-exports the
+     real fixes from src/. Every rule cites a measured result. tests/test_auditor.py: 7 tests pass.
+     pyproject.toml added; committed 4a522ac.
+  2. DASHBOARD `docs/dashboard.html`: interactive console (auditor logic ported to JS, fully
+     client-side) — live verdict + severity-striped risk cards, the 2x2 safety map that highlights
+     the active scenario, a containment visualizer showing WHY range aggregation collapses, and an
+     evidence ledger. Theme-aware (light/dark), responsive, zero external deps. Published as an
+     Artifact: https://claude.ai/code/artifact/f2d7cc06-934d-4df5-bc04-b942c5b3b930
+- Found: Framework installs clean, CLI + 7 tests pass, JS syntax-checked (node --check), no console
+  errors, renders correctly in dark mode. Note: couldn't drive scroll/clicks INTO the sandboxed
+  artifact iframe via automation (tooling limitation, not a page bug) — but JS runs on load (computed
+  the 3.0x ratio / HIGH verdict live) and render() completing means the map/viz/ledger rendered too.
+- Next: verify citations; ieeeaccess.cls; compile. Optional: add a one-line paper mention of the
+  CLI artifact. 3rd dataset still the open user decision.
+- Blocked on: Nothing.
+
+---
+
 ## 2026-08-05 (cont.) — Closed the domain-unknown routing open problem
 - Did: Implemented `predict_domain_unknown` in src/aggregation.py (was NotImplementedError stub)
   with TWO tag-free routing strategies + an `infer_domains` helper. NO MoE/adapter/ML router — the
