@@ -29,8 +29,9 @@ Sequentially Arriving Domains}
 \author{Vansh~Mundhra,~Pinak~Debnath,~and~Sankari~M% <-this % stops a space
 \thanks{The authors are with the School of Computer Science and Engineering,
 Vellore Institute of Technology (VIT), Chennai, India
-(e-mail: vansh.mundhra@example.edu; pinak.debnath@example.edu; sankari.m@vit.ac.in).}%
-\thanks{Manuscript prepared July 2026. Corresponding author: V.~Mundhra.}}
+(e-mail: vansh.mundhra2023@vitstudent.ac.in; pinak.debnath2023@vitstudent.ac.in;
+sankari.m@vit.ac.in).}%
+\thanks{Manuscript prepared September 2026. Corresponding author: V.~Mundhra.}}
 
 \markboth{Preprint --- submitted to IEEE Access}%
 {Mundhra \MakeLowercase{\textit{et al.}}: Domain-Aware Federated Log Anomaly Detection}
@@ -63,8 +64,9 @@ occurring only when a broad-vocabulary domain is onboarded after a narrow one. W
 for both failures: a domain-aware aggregation that restores the collapsed range method (routing with no
 oracle domain tag, at $100\%$ inferred-routing accuracy), and, for the forgetting, both a small replay
 buffer ($\approx10\%$ of the earlier domain's data, cutting forgetting from $0.665$ to $0.004$) and a
-memory-free EWC alternative, which we compare directly. All results are reproduced from real runs on
-commodity CPU.
+memory-free EWC alternative, which we compare directly. We distill the whole map into a deployable,
+summary-statistics-only safety auditor that flags each failure and prescribes its fix \emph{before}
+training. Every reported number comes from a real run on commodity CPU.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -130,9 +132,11 @@ performance and routes at inference with no oracle tag ($100\%$ inferred-routing
 (iii) a controlled analysis showing that \emph{simultaneous} mixing is safe but \emph{sequential}
 arrival is catastrophic \emph{iff} the representation shares a feature space, and that this forgetting is
 \emph{directional} (only broad-after-narrow onboarding forgets), together with two mitigations we compare
-head-to-head---a memory-based replay buffer and memory-free EWC---that each remove the forgetting; and
-(iv) a reproducible, CPU-only artifact
-in which every reported number traces to a result file.
+head-to-head---a memory-based replay buffer and memory-free EWC---that each remove the forgetting;
+(iv) a deployable \emph{safety auditor} that operationalizes the map: from per-client summary
+statistics alone (event-id blocks and normal-length ranges, never raw logs) it predicts which of
+these failures a planned federation will hit and prescribes the fix, released as a command-line
+tool; and (v) a CPU-only research artifact in which every reported number traces to a result file.
 
 \section{Related Work}
 
@@ -643,6 +647,19 @@ any range/threshold statistic in a heterogeneous federation; (ii) prefer simulta
 onboarding when possible; and (iii) if sequential onboarding is unavoidable with a semantics-based
 model, budget a small replay buffer, which we show (Section~\ref{sec:replay}) removes the forgetting
 at the cost of a few hundred stored sequences and no architecture change.
+
+\textbf{A deployable safety auditor.} These three guidances are decision rules over quantities a
+federation already knows before training: each domain's event-id block (hence whether vocabularies
+are disjoint) and its normal-length range (hence the containment condition of Section~\ref{sec:h1}),
+plus the intended arrival pattern and input representation. We therefore compile the map into a small
+\emph{pre-deployment auditor} that takes only these per-client summary statistics---never raw
+logs, preserving the federated privacy model---and returns, for a planned federation, which failures
+it will hit (range-aggregation collapse, unbounded set-union growth, or directional catastrophic
+forgetting) together with the prescribed fix (per-domain ranges, a bounded vocabulary, or a replay
+buffer / EWC). The auditor is deterministic, dependency-free, and released as a command-line tool
+alongside the reference implementations of the fixes; it turns the paper's empirical map into an
+actionable check that a practitioner can run in seconds. This is, to our knowledge, the first such
+safety check for heterogeneous federated log analytics.
 
 \section{Threats to Validity}
 \textbf{DeepLog absolute level.} Our single-domain HDFS DeepLog operates at $F_1\approx0.70$
