@@ -32,8 +32,9 @@ def _example() -> int:
     domains = [
         DomainSpec("hdfs", (0, 33), (4, 300)),
         DomainSpec("bgl", (33, 427), (1, 900)),
+        DomainSpec("openstack", (427, 443), (1, 27)),   # the third, tight-length domain
     ]
-    print("### Lightweight detectors, mixed simultaneously (H1 axis):")
+    print("### Lightweight detectors, 3-domain federation mixed simultaneously (H1 axis):")
     print(audit_federation(domains, arrival="simultaneous", detector="lightweight").render())
     print("\n### Deep detector, SEQUENTIAL embedding onboarding hdfs->bgl (the failing cell):")
     print(audit_federation(domains, arrival="sequential", representation="embedding",

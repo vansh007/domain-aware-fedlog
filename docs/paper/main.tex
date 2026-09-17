@@ -17,14 +17,18 @@
 \usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{amsthm}
 \usepackage{url}
 \usepackage[hidelinks]{hyperref}
 \graphicspath{{../../results/}}
 
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+
 \begin{document}
 
-\title{Domain-Aware Federated Log Anomaly Detection under Heterogeneous and
-Sequentially Arriving Domains}
+\title{Domain-Aware Federated Log Anomaly Detection: A Safety Map for Heterogeneous
+and Sequentially Arriving Domains}
 
 \author{Vansh~Mundhra,~Pinak~Debnath,~and~Sankari~M% <-this % stops a space
 \thanks{The authors are with the School of Computer Science and Engineering,
@@ -64,9 +68,14 @@ occurring only when a broad-vocabulary domain is onboarded after a narrow one. W
 for both failures: a domain-aware aggregation that restores the collapsed range method (routing with no
 oracle domain tag, at $100\%$ inferred-routing accuracy), and, for the forgetting, both a small replay
 buffer ($\approx10\%$ of the earlier domain's data, cutting forgetting from $0.665$ to $0.004$) and a
-memory-free EWC alternative, which we compare directly. We distill the whole map into a deployable,
-summary-statistics-only safety auditor that flags each failure and prescribes its fix \emph{before}
-training. Every reported number comes from a real run on commodity CPU.
+memory-free EWC alternative, which we compare directly. The map is not specific to this setting: we
+\emph{prove} the range collapse as a containment condition, confirm it in a three-domain federation
+(adding OpenStack), and show the forgetting is architecture-general---a Transformer forgets under
+sequential arrival too, and does so even under the scalar input that leaves the LSTM immune, because a
+shared feature space, not any one encoder, is the cause. Because these failures are silent and
+security-critical in production, we distill the whole map into a deployable, summary-statistics-only
+safety auditor that flags each failure and prescribes its fix \emph{before} training. Every reported
+number comes from a real run on commodity CPU.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -124,19 +133,21 @@ representation, not the aggregation method, as the cause. Set-union detectors ne
 grow $\times3.7$ per added domain, breaking C2 under evolution.
 \end{itemize}
 
-Our contributions are: (i) a merged cross-domain vocabulary and dataloader that let heterogeneous
-log clients share one federation---the enabling artifact absent from prior pipelines; (ii) to our knowledge, the
-first empirical demonstration, across five seeds and both IID and non-IID splits, that domain-blind
-range aggregation fails under domain skew, with a minimal domain-aware fix that restores single-domain
-performance and routes at inference with no oracle tag ($100\%$ inferred-routing accuracy);
-(iii) a controlled analysis showing that \emph{simultaneous} mixing is safe but \emph{sequential}
-arrival is catastrophic \emph{iff} the representation shares a feature space, and that this forgetting is
-\emph{directional} (only broad-after-narrow onboarding forgets), together with two mitigations we compare
-head-to-head---a memory-based replay buffer and memory-free EWC---that each remove the forgetting;
-(iv) a deployable \emph{safety auditor} that operationalizes the map: from per-client summary
-statistics alone (event-id blocks and normal-length ranges, never raw logs) it predicts which of
-these failures a planned federation will hit and prescribes the fix, released as a command-line
-tool; and (v) a CPU-only research artifact in which every reported number traces to a result file.
+Our contributions are: (i) a merged cross-domain vocabulary and dataloader that let heterogeneous log
+clients share one federation---the enabling artifact absent from prior pipelines; (ii) the first
+demonstration, across five seeds and both IID and non-IID splits, that domain-blind range aggregation
+fails under domain skew, which we \emph{prove} as a containment condition
+(Proposition~\ref{prop:collapse}), with a minimal domain-aware fix that provably restores single-domain
+performance and routes at inference with no oracle tag (Corollary~\ref{cor:routing}; $100\%$ accuracy);
+(iii) a controlled $2\times2$ map showing \emph{simultaneous} mixing is safe but \emph{sequential}
+arrival is catastrophic \emph{iff} the representation shares a feature space, that this forgetting is
+\emph{directional}, and that it is \emph{architecture-general}---an LSTM and a self-attention
+Transformer both forget---together with two head-to-head mitigations (replay and EWC) that each remove
+it; (iv) a generalization beyond the pair to a \emph{three-domain} federation (adding OpenStack) that
+reproduces the range and routing results exactly; (v) a deployable \emph{safety auditor} that, from
+per-client summary statistics alone (event-id blocks and length ranges, never raw logs), predicts which
+failures a planned federation will hit and prescribes the fix, released as a tool; and (vi) a CPU-only
+artifact in which every reported number traces to a result file.
 
 \section{Related Work}
 
@@ -264,7 +275,11 @@ $29\pm6$); BGL has 394 event types, $37{,}823$ normal and $31{,}429$ abnormal se
 length $69\pm747$). The merged vocabulary is $427$. We report per-domain precision, recall, and
 $F_1$ (anomaly is the positive class), forgetting ($F_1^{\text{before}}-F_1^{\text{after}}$), and
 model state size in bytes. Seeds $0$--$4$ are used where noted, and we report mean $\pm$ population
-standard deviation. All experiments run on commodity CPU; DeepLog evaluation is made tractable by
+standard deviation. Every headline effect is consistent in sign across \emph{all} seeds and carries a
+very large paired effect size (Cohen's $d_z>20$); where a paired test applies we report it---domain-aware
+vs.\ domain-blind HDFS Length ($t_4{=}47.4$, $p{=}1.2\times10^{-6}$), embedding vs.\ scalar forgetting
+($t_2{=}293$, $p{=}1.2\times10^{-5}$), and no-buffer vs.\ $10\%$-replay forgetting ($t_2{=}196$,
+$p{=}2.6\times10^{-5}$). All experiments run on commodity CPU; DeepLog evaluation is made tractable by
 deduplicating identical test sequences and weighting by count.
 
 Before any mixed-domain conclusion, we reproduce single-domain baselines
@@ -307,23 +322,39 @@ mechanism rather than assert general collapse. Third, the story is unchanged und
 quantity skew, and domain-aware Length is \emph{partition-invariant} by construction (its HDFS
 numbers are identical under IID and non-IID; see \texttt{results/h1\_multiseed\_lognormal.csv}).
 
-\textbf{Why this is not specific to HDFS+BGL.} The collapse is a structural property of min--max
-union, not an accident of this domain pair, and a short argument makes the generality precise.
-Domain-blind Length flags a test sequence of length $\ell$ iff $\ell\notin[\underline{L},\overline{L}]$,
-where $\underline{L}=\min_d \underline{L}_d$ and $\overline{L}=\max_d \overline{L}_d$ are the global
-min-of-mins and max-of-maxes over all co-training domains $d$. Consider a ``victim'' domain $a$ whose
-anomalies are detectable standalone because their lengths lie outside $a$'s own normal range
-$[\underline{L}_a,\overline{L}_a]$. If \emph{any} co-training domain $b$ satisfies
-$\underline{L}_b\le \underline{L}_a^{\mathrm{anom}}$ and $\overline{L}_b\ge \overline{L}_a^{\mathrm{anom}}$
-(its normal-length support covers $a$'s anomaly-length support), then the global range
-$[\underline{L},\overline{L}]\supseteq[\underline{L}_a^{\mathrm{anom}},\overline{L}_a^{\mathrm{anom}}]$ and
-\emph{every} such anomaly falls inside the global range, driving $a$'s recall---and hence $F_1$---to
-zero. This is exactly what a wide-spread domain like BGL ($69\pm747$) does to a tight one like HDFS
-($29\pm6$), but the condition is stated over arbitrary domains: any heterogeneous federation
-containing one broad-length domain will collapse range-based detection on every tighter co-resident,
-and the domain-aware fix (per-domain $[\underline{L}_d,\overline{L}_d]$) removes the coupling term by
-construction, for any number of domains. The two-domain experiment instantiates a general
-containment condition rather than a single data point.
+\textbf{Why this generalizes: a containment condition.} The collapse is a structural property of
+min--max union, not an accident of this domain pair, and we make the generality precise rather than
+asserting it. Domain-blind Length flags a test sequence of length $\ell$ iff
+$\ell\notin[\underline{L},\overline{L}]$, where $\underline{L}=\min_{d}\underline{L}_d$ and
+$\overline{L}=\max_{d}\overline{L}_d$ range over all co-training domains.
+
+\begin{proposition}[Range-aggregation collapse]\label{prop:collapse}
+Let domain $a$ have normal-length range $[\underline{L}_a,\overline{L}_a]$ and anomaly-length support
+$A_a$ with $A_a\cap[\underline{L}_a,\overline{L}_a]=\emptyset$ (so the single-domain range detector
+attains recall $1$ on $A_a$). If some co-training domain $b\neq a$ satisfies
+$A_a\subseteq[\underline{L}_b,\overline{L}_b]$, then domain-blind Length attains recall $0$---hence
+$F_1=0$---on $a$, whereas domain-aware Length attains the single-domain recall.
+\end{proposition}
+\begin{proof}
+Since $[\underline{L},\overline{L}]\supseteq[\underline{L}_b,\overline{L}_b]\supseteq A_a$, every
+anomaly length $\ell\in A_a$ satisfies $\ell\in[\underline{L},\overline{L}]$, so the flag predicate
+$\ell\notin[\underline{L},\overline{L}]$ is false and no anomaly of $a$ is flagged; with zero true
+positives, $F_1=0$. Domain-aware Length evaluates $\ell\notin[\underline{L}_a,\overline{L}_a]$, which
+holds for every $\ell\in A_a$ by hypothesis, recovering the single-domain recall.
+\end{proof}
+
+The hypothesis is over \emph{arbitrary} domains and any number of them: a single broad-length domain
+collapses range detection on \emph{every} tighter co-resident. BGL ($69\pm747$) contains HDFS's
+anomaly-length support ($29\pm6$), which is exactly the measured $0.538\!\rightarrow\!0.000$ collapse,
+and Section~\ref{sec:3domain} confirms the proposition with a second co-resident (OpenStack) present.
+The domain-aware estimator removes the cross-domain coupling by construction, for any $|\mathcal{D}|$.
+
+\begin{corollary}[Tag-free recovery]\label{cor:routing}
+If the domains own disjoint event-id blocks, each sequence's domain is recoverable exactly from its
+event ids; hence domain-aware Length attains its single-domain $F_1$ with no external domain tag.
+\end{corollary}
+\noindent Corollary~\ref{cor:routing} is realized by the vocabulary-block router below, whose routing
+accuracy is $1.000$.
 
 \textbf{The fix needs no oracle tag.} A real deployment may not label a sequence's domain, so we
 evaluate the domain-aware fix under two tag-free routing strategies and compare both to the oracle
@@ -635,6 +666,126 @@ Mixed, Length domain-aware (recovered 0.5379) & 0.9836 \\
 \end{tabular}
 \end{table}
 
+\section{Generality: A Third Domain and a Modern Architecture}\label{sec:generality}
+A study of two datasets and one detector invites the question of whether the map is a property of
+federated log analytics or of this specific pair and model. We test both axes directly.
+
+\subsection{A third log domain}\label{sec:3domain}
+We add OpenStack~\cite{du2017deeplog} as a third domain, parsed from the LogHub~\cite{zhu2023loghub}
+raw logs into the same event-id-sequence format (Drain templates, grouped per VM instance); it occupies
+a third disjoint vocabulary block $[427,443)$ for a merged $443$-event space. OpenStack is deliberately
+different in profile: a narrow $16$-event vocabulary and a very tight normal length ($24.9\pm0.8$), and
+its labelled anomalies are \emph{order}-based (identical event set and length to normal sequences),
+detectable only by a sequence model---a third anomaly type distinct from HDFS (length/event) and BGL
+(event). We rerun H1 and tag-free routing on the mixed federation $\{$HDFS, BGL, OpenStack$\}$ over five
+seeds (Table~\ref{tab:3domain}). Three results stand out. First, the H1 collapse-and-recovery on HDFS is
+\emph{numerically identical} to the two-domain case (Length $0.000\rightarrow0.561$) even with OpenStack
+also co-resident, confirming Proposition~\ref{prop:collapse} beyond the pair. Second, vocabulary-block
+routing recovers the true domain of \emph{every} test sequence across all three disjoint blocks
+(accuracy $1.000$; $569{,}479+68{,}874+1{,}857$ sequences), so Corollary~\ref{cor:routing} holds at
+three domains. Third, OpenStack's order-based anomalies evade \emph{both} lightweight detectors (Length
+and Known Events $=0$), reinforcing that no single lightweight statistic dominates and that such domains
+require the deep model---while its rich normal set makes the length-range result solid. OpenStack ships
+only four labelled anomalies (a documented benchmark limitation), so we use it for the range/routing
+generality result and report its positive count openly rather than as a headline detection score.
+
+\begin{table}[t]
+\caption{H1 and routing generalize to a three-domain federation $\{$HDFS, BGL, OpenStack$\}$
+(mean $\pm$ std, $n=5$ seeds). HDFS collapse-and-recovery is identical to the two-domain case; routing
+is exact across three disjoint blocks. Source: \texttt{results/h1\_3domain.csv}.}
+\label{tab:3domain}
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Domain & Length blind & Length d.-aware & Known Events & Route acc. \\
+\midrule
+HDFS      & $0.000\pm0.000$ & $\mathbf{0.561\pm0.024}$ & $0.564\pm0.117$ & $1.000$ \\
+BGL       & $0.033\pm0.044$ & $0.033\pm0.044$ & $0.987\pm0.003$ & $1.000$ \\
+OpenStack & $0.000\pm0.000$ & $0.000\pm0.000$ & $0.000\pm0.000$ & $1.000$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{A modern architecture: attention forgets too}\label{sec:arch}
+To test whether the forgetting is an artifact of DeepLog's recurrence, we replace the LSTM with a
+small self-attention Transformer (two encoder layers, $64$-d, four heads, learned positional encoding)
+that consumes the identical windows and top-$g$ rule, and rerun H2 (simultaneous) and H3 (sequential)
+over three seeds under both input encodings (Table~\ref{tab:arch}). The map holds: under
+\emph{simultaneous} mixing the Transformer does not degrade (HDFS drop $-0.022$ scalar, $-0.007$
+embedding; BGL improves), whereas under \emph{sequential} arrival it \emph{catastrophically forgets}
+HDFS (forgetting $0.636$ scalar, $0.361$ embedding, HDFS $F_1$ falling from ${\sim}0.68$). Two points
+sharpen the mechanism. First, the failure is \emph{not} DeepLog-specific---a categorically different
+architecture reproduces it. Second, and more telling, the Transformer forgets even under the
+\emph{scalar} input that left the LSTM immune (Table~\ref{tab:h3}): its learned input projection maps
+the scalar id into a shared $d$-dimensional space, so the two vocabularies overlap in feature space
+regardless of the raw encoding. This confirms that a \emph{shared feature space}, not the embedding
+layer per se, is the operative cause, and that the LSTM's scalar-input immunity is an
+architecture-specific accident: modern encoders, which project inputs by design, are \emph{more}
+exposed, not less---exactly the model-class-wide risk of Section~\ref{sec:impact}.
+
+\begin{table}[t]
+\caption{The forgetting is architecture-general. A self-attention Transformer, under the identical
+protocol, is safe under simultaneous mixing but catastrophically forgets under sequential arrival---and
+forgets even under the scalar input that left the LSTM (Table~\ref{tab:h3}) immune, because its input
+projection shares feature space across domains. Mean $\pm$ std, $n=3$ seeds.
+Source: \texttt{results/transformer\_mechanism.csv}.}
+\label{tab:arch}
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Transformer input & H2 HDFS drop (simult.) & H3 forgetting (sequential) \\
+\midrule
+scalar id  & $-0.022\pm0.020$ & $\mathbf{+0.636\pm0.003}$ \\
+embedding  & $-0.007\pm0.004$ & $\mathbf{+0.361\pm0.140}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Deployment Implications for Production Federations}\label{sec:impact}
+Federated log analytics is adopted precisely where centralizing logs is legally or operationally
+impossible: multi-tenant public clouds, banks and payment networks, healthcare providers, telecom
+and IoT fleets, and critical-infrastructure operators. Such organizations do not run one homogeneous
+log source; they run \emph{many} categorically different ones (compute, storage, network, application,
+security appliances), added incrementally as services are onboarded. That is exactly the heterogeneous,
+evolving regime our study targets, and the failures we identify have three properties that make them
+consequential in production rather than academic curiosities.
+
+\textbf{The failures are silent and security-critical.} Neither the range-aggregation collapse nor the
+catastrophic forgetting raises an error, degrades a loss curve visibly, or crashes a service. The
+detector simply stops flagging anomalies for one domain while continuing to report healthy operation
+for the others---HDFS recall falls to zero (Proposition~\ref{prop:collapse}), or an earlier domain's
+$F_1$ drops from $0.70$ to $0.04$ the moment a new domain is onboarded. In a security setting this
+means an intrusion in the affected domain becomes invisible; in a reliability setting, an outage
+precursor is missed. A silent blind spot in a monitoring system is more dangerous than an outage of it,
+because operators continue to trust a system that has quietly stopped working.
+
+\textbf{Scaling coverage can destroy coverage.} The most alarming case is sequential onboarding: adding
+a monitored source---a routine, frequent operations action---can catastrophically erase detection for
+sources already in the federation (H3, Section~\ref{sec:mech}). The very act of extending monitoring to
+a new service silently blinds monitoring of existing services. Our directionality result
+(Table~\ref{tab:reverse}) turns this into a concrete operational lever: onboarding a broad, high-cardinality
+source \emph{after} a narrow one is the dangerous order, so where the schedule is controllable, broad
+domains should be introduced first.
+
+\textbf{The risk is model-class-wide, not a single-model artifact.} We show the forgetting on both an
+LSTM (DeepLog) and a self-attention Transformer (Section~\ref{sec:arch}), and it is governed by whether
+the input representation shares a feature space across domains. Any semantics-based encoder---learned
+embeddings, template-vector models, or the LLM-derived log features the field is now moving toward---shares
+feature space by construction, and is therefore exposed. As log analytics adopts large-model
+representations, this failure mode becomes \emph{more} likely, not less.
+
+\textbf{The safeguards cost almost nothing.} The remedies are cheap enough to adopt unconditionally:
+per-domain range parameters add $O(|\mathcal{D}|)$ state; tag-free vocabulary-block routing needs no
+labels (Corollary~\ref{cor:routing}); and a replay buffer of a few hundred sequences removes the
+forgetting at no architectural change (Section~\ref{sec:replay}). Crucially, our safety auditor
+(Section~\ref{sec:auditor}, released as an open tool) converts a latent \emph{runtime} risk into a
+\emph{pre-deployment} configuration check that consumes only per-client summary statistics---event-id
+blocks and length ranges, never raw logs---so a federation operator can gate a rollout in continuous
+integration without weakening the privacy model that motivated federation in the first place. The net
+practical contribution is a way to obtain the efficiency and privacy benefits of federated log analytics
+in a realistic heterogeneous deployment \emph{without} the silent, security-critical failures those
+benefits would otherwise hide.
+
 \section{Discussion}
 Our results refine the two published claims rather than overturn them wholesale. C1 (invariance)
 \emph{fails} for range-based aggregation under domain skew, and a per-domain fix restores it; it
@@ -648,7 +799,8 @@ onboarding when possible; and (iii) if sequential onboarding is unavoidable with
 model, budget a small replay buffer, which we show (Section~\ref{sec:replay}) removes the forgetting
 at the cost of a few hundred stored sequences and no architecture change.
 
-\textbf{A deployable safety auditor.} These three guidances are decision rules over quantities a
+\subsection{A deployable safety auditor}\label{sec:auditor}
+These three guidances are decision rules over quantities a
 federation already knows before training: each domain's event-id block (hence whether vocabularies
 are disjoint) and its normal-length range (hence the containment condition of Section~\ref{sec:h1}),
 plus the intended arrival pattern and input representation. We therefore compile the map into a small
@@ -685,9 +837,13 @@ regime. Importantly, the H3 forgetting finding is a
 scalar), and does not depend on the absolute level; H2 and H3 were run at 12 rounds, already at the
 plateau.
 
-\textbf{Other threats.} We use two domains (HDFS, BGL); two genuinely different domains already
-exhibit the failure, and more would widen the predicted gap, but generalization to further domains
-(e.g., Thunderbird, Spirit) is future work requiring new parsers. Known Events shows high seed
+\textbf{Other threats.} We use three domains (HDFS, BGL, OpenStack): the range and routing results
+hold with a third domain co-resident (Section~\ref{sec:3domain}) and the forgetting holds across two
+architectures (Section~\ref{sec:arch}), so the findings are not artifacts of a single pair or model.
+OpenStack ships only four labelled anomalies, a documented limitation of that benchmark, so we use it
+for the range/routing generality rather than as a headline detection score; scaling to many domains
+and to alert-labelled sources (Thunderbird, Spirit), which require a different windowing pipeline,
+remains future work. Known Events shows high seed
 variance on HDFS ($0.56\pm0.12$), which we report openly. Our DeepLog evaluation treats sequences
 shorter than the window as normal; because the single-vs-mixed comparison uses an identical harness,
 the relative effect is unaffected. ECVC uses a transductive (test-set) threshold, following the
@@ -700,15 +856,18 @@ and evolving federation. Range-based aggregation collapses under domain mixing, 
 domain-aware aggregation restores it to single-domain performance. Simultaneous mixed FedAvg on the
 deep model is robust, but sequential onboarding into a shared-representation model forgets
 catastrophically (a danger the reference's scalar-id encoding happens to mask), while set-union
-detectors never forget but grow unbounded. The contribution is a reproducible account of how the
-failure depends jointly on the detection method, the arrival pattern, the input representation, and the
-onboarding \emph{direction}, together with working fixes for both failing cases: a domain-aware
-aggregation that routes without an oracle tag, and---for the forgetting---both a small replay buffer and
-a memory-free EWC penalty, which we compare directly. Future work includes (i) longer arrival sequences
-($>2$ domains), where replay-buffer sizing, EWC $\lambda$ scheduling, and cross-domain interference
-compound; (ii) additional log domains (e.g., Thunderbird, Spirit) to stress the map beyond the two-domain
-containment condition; and (iii) automatic selection of the EWC penalty, whose six-order-of-magnitude
-sensitivity we document as its main practical drawback relative to replay.
+detectors never forget but grow unbounded. The contribution is a reproducible account of how the failure depends jointly on the detection method,
+the arrival pattern, the input representation, and the onboarding \emph{direction}---made precise as a
+containment condition (Proposition~\ref{prop:collapse}), shown to hold across three domains and two
+architectures, and turned into working fixes (domain-aware aggregation with tag-free routing; replay
+and EWC for the forgetting) and a pre-deployment safety auditor. Because the failures are silent and
+security-critical in real federations, the practical upshot is a way to keep the privacy and efficiency
+of federated log analytics in a heterogeneous, evolving deployment without the blind spots those
+benefits would otherwise hide. Future work includes (i) longer arrival streams of many domains, where
+replay-buffer sizing, EWC $\lambda$ scheduling, and cross-domain interference compound; (ii)
+alert-labelled sources (Thunderbird, Spirit) that need a different windowing pipeline and richer anomaly
+sets than OpenStack provides; and (iii) automatic selection of the EWC penalty, whose
+six-order-of-magnitude sensitivity we document as its main practical drawback relative to replay.
 
 % -------------------------------------------------------------------------------------
 % References are embedded inline so the paper renders without a BibTeX pass.

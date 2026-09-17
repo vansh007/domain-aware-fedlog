@@ -32,6 +32,38 @@ Format for each entry:
 
 ---
 
+## 2026-09-18 — Conference push: theory + 3rd domain + Transformer + impact
+- Context: user is pitching this to a foreign professor then a top venue; must be exceptional,
+  show real organizational value. Two biggest levers chosen: 3rd/4th domain + modern deep detector.
+- Did (all real runs, every number traces to a CSV):
+  1. THEORY: formalized H1 collapse as Proposition 1 (min-max containment condition) with proof +
+     Corollary (disjoint blocks => tag-free recovery). Added amsthm to preamble.
+  2. 3RD DOMAIN (OpenStack): scripts/parse_openstack.py downloads LogHub OpenStack (Zenodo, 5.4MB),
+     Drain-templates, groups by VM instance -> data/OPENSTACK/{normal,abnormal}.csv (16 events,
+     1871 normal, 4 anomalies). FINDING: OpenStack anomalies are ORDER-based (identical event set +
+     length 25 to normal) -> invisible to Length AND Known-Events, need a sequence model; a 3rd
+     distinct profile. scripts/run_h1_3domain.py (5 seeds, results/h1_3domain.csv): H1 collapse+recover
+     on HDFS IDENTICAL (0.000->0.561) with OpenStack co-resident; routing 1.000 across 3 disjoint
+     blocks. -> new sec:generality + sec:3domain + tab:3domain. Confirms Proposition beyond the pair.
+  3. MODERN ARCHITECTURE: added TransformerLog to src/methods/deeplog_fed.py behind FedConfig.model_type
+     (DeepLog path byte-identical). scripts/transformer_mechanism.py (3 seeds, results/transformer_mechanism.csv):
+     forgetting is ARCHITECTURE-GENERAL. Transformer forgets under sequential arrival BOTH scalar
+     (+0.636+/-0.003) and embedding (+0.361+/-0.140), simultaneous safe. KEY: forgets even under SCALAR
+     (LSTM was immune) because its input projection shares feature space -> cause is a SHARED FEATURE
+     SPACE, and modern encoders (which project inputs) are MORE exposed. -> sec:arch + tab:arch.
+  4. STATS RIGOR: paired t-tests (H1 t4=47.4 p=1.2e-6; embedding-vs-scalar forget t2=293 p=1.2e-5;
+     replay t2=196 p=2.6e-5), Cohen dz>20, effects same-sign in all seeds. Added to Experimental Setup.
+  5. IMPACT: new sec:impact "Deployment Implications for Production Federations" — failures are silent +
+     security-critical, scaling coverage can destroy coverage, risk is model-class-wide (incl LLM log
+     features), safeguards cost ~nothing, auditor = pre-deployment CI check. Title -> "...: A Safety Map".
+     Abstract/contributions(i-vi)/threats/conclusion updated. Installed drain3, scipy.
+- Found: every new result strengthens, none reversed. Paper validates (5 figs, 11 tables, Prop/proof/Cor
+  balanced, refs/cites resolve). data/OPENSTACK + data/HADOOP_raw are gitignored (regen via parser+Zenodo).
+- Next: propagate to companion files (dashboard ledger, auditor evidence); verify citations; ieeeaccess.cls; compile.
+- Blocked on: Nothing.
+
+---
+
 ## 2026-08-05 (cont.) — Built the fedlog-audit framework + interactive dashboard
 - Did: Productized the paper into (1) an installable Python package and (2) a self-contained
   web dashboard, per user request ("both").

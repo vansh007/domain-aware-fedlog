@@ -237,7 +237,8 @@ def audit_forgetting(domains, arrival, representation, detector, order) -> Risk:
                     "Budget a replay buffer of >=10% of the earlier domain (tuning-free), OR use EWC "
                     "(memory-free but needs a large, carefully-tuned penalty).",
                     "H3 (embedding): forgetting +0.665, HDFS 0.70->0.04. Replay 10% -> +0.004; "
-                    "EWC works only at lambda=1e8.")
+                    "EWC works only at lambda=1e8. Architecture-general: an LSTM (DeepLog) and a "
+                    "Transformer both forget under sequential arrival.")
     return Risk("Catastrophic forgetting", "LOW",
                 "Deep model with a shared representation under sequential arrival, but domains are "
                 "onboarded narrow-after-broad; forgetting is directional and this direction is safe.",
