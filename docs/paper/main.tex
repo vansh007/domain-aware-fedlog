@@ -678,7 +678,7 @@ different in profile: a narrow $16$-event vocabulary and a very tight normal len
 its labelled anomalies are \emph{order}-based (identical event set and length to normal sequences),
 detectable only by a sequence model---a third anomaly type distinct from HDFS (length/event) and BGL
 (event). We rerun H1 and tag-free routing on the mixed federation $\{$HDFS, BGL, OpenStack$\}$ over five
-seeds (Table~\ref{tab:3domain}). Three results stand out. First, the H1 collapse-and-recovery on HDFS is
+seeds (Table~\ref{tab:3domain}, Fig.~\ref{fig:3domain}). Three results stand out. First, the H1 collapse-and-recovery on HDFS is
 \emph{numerically identical} to the two-domain case (Length $0.000\rightarrow0.561$) even with OpenStack
 also co-resident, confirming Proposition~\ref{prop:collapse} beyond the pair. Second, vocabulary-block
 routing recovers the true domain of \emph{every} test sequence across all three disjoint blocks
@@ -706,11 +706,22 @@ OpenStack & $0.000\pm0.000$ & $0.000\pm0.000$ & $0.000\pm0.000$ & $1.000$ \\
 \end{tabular}
 \end{table}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{three_domain_h1.png}
+\caption{H1 and tag-free routing generalize to a three-domain federation. HDFS
+collapse-and-recovery (domain-blind $0.00\rightarrow$ domain-aware $0.56$) is numerically identical to
+the two-domain case with OpenStack also co-resident, and vocabulary-block routing is exact across all
+three disjoint id blocks. OpenStack's order-based anomalies are invisible to both lightweight
+detectors, marking it a distinct third profile.}
+\label{fig:3domain}
+\end{figure}
+
 \subsection{A modern architecture: attention forgets too}\label{sec:arch}
 To test whether the forgetting is an artifact of DeepLog's recurrence, we replace the LSTM with a
 small self-attention Transformer (two encoder layers, $64$-d, four heads, learned positional encoding)
 that consumes the identical windows and top-$g$ rule, and rerun H2 (simultaneous) and H3 (sequential)
-over three seeds under both input encodings (Table~\ref{tab:arch}). The map holds: under
+over three seeds under both input encodings (Table~\ref{tab:arch}, Fig.~\ref{fig:arch}). The map holds: under
 \emph{simultaneous} mixing the Transformer does not degrade (HDFS drop $-0.022$ scalar, $-0.007$
 embedding; BGL improves), whereas under \emph{sequential} arrival it \emph{catastrophically forgets}
 HDFS (forgetting $0.636$ scalar, $0.361$ embedding, HDFS $F_1$ falling from ${\sim}0.68$). Two points
@@ -740,6 +751,16 @@ embedding  & $-0.007\pm0.004$ & $\mathbf{+0.361\pm0.140}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{architecture_generality.png}
+\caption{Forgetting under sequential arrival is architecture-general. Of the four
+architecture$\times$input combinations, only DeepLog with the scalar input is immune (disjoint input
+ranges); the Transformer forgets under \emph{both} inputs, because its learned input projection places
+even the scalar id into a shared feature space. All four are safe under simultaneous mixing.}
+\label{fig:arch}
+\end{figure}
 
 \section{Deployment Implications for Production Federations}\label{sec:impact}
 Federated log analytics is adopted precisely where centralizing logs is legally or operationally

@@ -441,10 +441,137 @@ def replay_curve(replay_path: str, out: str) -> None:
     print(f"wrote {out}")
 
 
+def _mean_std(vals):
+    m = sum(vals) / len(vals)
+    sd = (sum((v - m) ** 2 for v in vals) / len(vals)) ** 0.5
+    return m, sd
+
+
+def arch_generality(transformer_csv, mechanism_csv, out):
+    """Forgetting is architecture-general. Grouped bars of H3 forgetting (F1 before - after) for
+    DeepLog (LSTM) vs Transformer, under scalar vs embedding input. The one near-zero bar is
+    DeepLog+scalar; the other three forget --- including Transformer+scalar, which the LSTM
+    survives. Reads results/transformer_mechanism.csv and results/mechanism_multiseed.csv so every
+    value is exact; DeepLog+scalar forgetting is 0.000 (deterministic, results/h3_sequential.csv)."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        sys.exit("matplotlib not installed — pip install -r requirements.txt")
+
+    trows = _load(transformer_csv)
+    def tf(mode):
+        return _mean_std([float(r["forgetting"]) for r in trows if r["input_mode"] == mode])
+    tf_sca, tf_emb = tf("scalar"), tf("embedding")
+    # DeepLog embedding forgetting from the multiseed mechanism file; scalar is deterministic 0.
+    dl_emb = (0.0, 0.0)
+    for r in _load(mechanism_csv):
+        if r["experiment"] == "H3_embedding" and r["metric"] == "deeplog_hdfs_forgetting":
+            dl_emb = (float(r["mean"]), float(r["std"]))
+    dl_sca = (0.0, 0.0)
+
+    # grouped by INPUT (scalar, embedding); paired bars = DeepLog (teal) vs Transformer (rust)
+    groups = ["Scalar-id input", "Embedding input"]
+    deeplog = [dl_sca, dl_emb]
+    transf = [tf_sca, tf_emb]
+    lbl_box = dict(boxstyle="round,pad=0.16", fc="white", ec="none", alpha=0.9)
+
+    x = range(len(groups)); w = 0.34
+    fig, ax = plt.subplots(figsize=(8.4, 5.2))
+    ax.axhline(0, color="#4a5b6e", linewidth=1)
+    b1 = ax.bar([i - w / 2 for i in x], [m for m, _ in deeplog], width=w,
+                yerr=[s for _, s in deeplog], capsize=4, label="DeepLog (LSTM)",
+                color="#1C7293", edgecolor="black", linewidth=0.5, error_kw=dict(elinewidth=1.1))
+    b2 = ax.bar([i + w / 2 for i in x], [m for m, _ in transf], width=w,
+                yerr=[s for _, s in transf], capsize=4, label="Transformer (attention)",
+                color="#C1440E", edgecolor="black", linewidth=0.5, error_kw=dict(elinewidth=1.1))
+    for bars, data in ((b1, deeplog), (b2, transf)):
+        for bar, (m, s) in zip(bars, data):
+            ax.text(bar.get_x() + bar.get_width() / 2, m + s + 0.02, f"{m:.3f}",
+                    ha="center", va="bottom", fontsize=10, bbox=lbl_box)
+    # call out the single safe bar
+    ax.annotate("LSTM immune\n(disjoint input ranges)", xy=(-w / 2, 0.02), xytext=(-0.02, 0.30),
+                ha="center", fontsize=9.5, color="#1C7293", fontweight="bold",
+                arrowprops=dict(arrowstyle="->", color="#1C7293"))
+    ax.set_xticks(list(x)); ax.set_xticklabels(groups, fontsize=12)
+    ax.set_ylabel("Catastrophic forgetting  (HDFS $F_1$ before $-$ after)", fontsize=11)
+    ax.set_ylim(-0.03, 0.85)
+    ax.set_title("Forgetting under sequential arrival is architecture-general:\n"
+                 "attention forgets too — even under the scalar input that leaves the LSTM immune",
+                 fontsize=12)
+    ax.legend(fontsize=10, loc="upper center", ncol=2, framealpha=0.95)
+    ax.grid(axis="y", alpha=0.3)
+    ax.text(0.5, -0.16, "All four are safe under simultaneous mixing (|HDFS drop| $\\leq$ 0.02); "
+            "only sequential arrival forgets.", transform=ax.transAxes, ha="center",
+            fontsize=9, color="#4a5b6e", style="italic")
+    fig.tight_layout()
+    os.makedirs("results", exist_ok=True)
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    print(f"wrote {out}")
+
+
+def three_domain(csv_path, out):
+    """H1 + routing generalize to three domains. Grouped bars of per-domain F1 for Length
+    domain-blind, Length domain-aware (ours), and Known Events, over {HDFS, BGL, OpenStack}.
+    Reads results/h1_3domain.csv so values are exact."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        sys.exit("matplotlib not installed — pip install -r requirements.txt")
+
+    rows = _load(csv_path)
+    domains = ["hdfs", "bgl", "openstack"]
+    def col(dom, key):
+        return _mean_std([float(r[key]) for r in rows if r["domain"] == dom])
+    series = [
+        ("length_blind_f1", "Length, domain-blind", "#C1440E"),
+        ("length_da_f1", "Length, domain-aware (ours)", "#1C7293"),
+        ("known_events_f1", "Known Events", "#8AA29E"),
+    ]
+    lbl_box = dict(boxstyle="round,pad=0.14", fc="white", ec="none", alpha=0.9)
+    n = len(series); gw = 0.82; bw = gw / n
+    fig, ax = plt.subplots(figsize=(9, 5.3))
+    for si, (key, label, color) in enumerate(series):
+        xs, ms, ss = [], [], []
+        for di, dom in enumerate(domains):
+            m, s = col(dom, key)
+            xs.append(di + (si - (n - 1) / 2) * bw); ms.append(m); ss.append(s)
+        bars = ax.bar(xs, ms, width=bw * 0.92, yerr=ss, capsize=3, label=label, color=color,
+                      edgecolor="black", linewidth=0.4, error_kw=dict(elinewidth=1.0))
+        for bar, m, s in zip(bars, ms, ss):
+            if m >= 0.02 or key == "length_blind_f1":
+                ax.text(bar.get_x() + bar.get_width() / 2, m + s + 0.02, f"{m:.2f}",
+                        ha="center", va="bottom", fontsize=8.5, bbox=lbl_box)
+    # collapse -> recover annotation on HDFS
+    ax.annotate("collapse\n$\\rightarrow$ recover", xy=(-gw / 2 + bw, 0.561), xytext=(0.05, 0.80),
+                ha="center", fontsize=9.5, color="#1C7293", fontweight="bold",
+                arrowprops=dict(arrowstyle="->", color="#1C7293"))
+    ax.set_xticks(range(len(domains)))
+    ax.set_xticklabels(["HDFS", "BGL", "OpenStack"], fontsize=12)
+    ax.set_ylabel("$F_1$  (mean $\\pm$ std, 5 seeds)", fontsize=11)
+    ax.set_ylim(0, 1.36)
+    ax.set_title("H1 and routing generalize to three domains {HDFS, BGL, OpenStack}:\n"
+                 "HDFS collapse$\\rightarrow$recover is identical with a third domain co-resident",
+                 fontsize=12, y=1.06)
+    ax.legend(fontsize=9.5, loc="upper center", ncol=3, framealpha=0.95, columnspacing=1.2)
+    ax.grid(axis="y", alpha=0.3)
+    ax.text(0.5, -0.15, "Vocabulary-block routing accuracy = 1.000 across all three disjoint id "
+            "blocks. OpenStack anomalies are order-based (invisible to both lightweight detectors).",
+            transform=ax.transAxes, ha="center", fontsize=9, color="#4a5b6e", style="italic")
+    fig.tight_layout()
+    os.makedirs("results", exist_ok=True)
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    print(f"wrote {out}")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--kind",
-                    choices=["f1_compare", "h1", "h2", "h3", "mech", "map", "replay"],
+                    choices=["f1_compare", "h1", "h2", "h3", "mech", "map", "replay",
+                             "arch", "3domain"],
                     required=True)
     ap.add_argument("--single")
     ap.add_argument("--mixed")
@@ -471,3 +598,7 @@ if __name__ == "__main__":
         two_by_two_map(args.out)
     elif args.kind == "replay":
         replay_curve(args.mixed or "results/mitigation_replay.csv", args.out)
+    elif args.kind == "arch":
+        arch_generality("results/transformer_mechanism.csv", "results/mechanism_multiseed.csv", args.out)
+    elif args.kind == "3domain":
+        three_domain(args.mixed or "results/h1_3domain.csv", args.out)
