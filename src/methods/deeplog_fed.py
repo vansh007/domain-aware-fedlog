@@ -75,6 +75,49 @@ class DeepLog(nn.Module):
         return self.fc(out[:, -1, :])          # logits over next event, [B, num_keys]
 
 
+class TransformerLog(nn.Module):
+    """A modern, self-attention next-event detector with the SAME interface as DeepLog, so it
+    drops into the identical H2/H3/mechanism harness (window in, top-g rule out). Its purpose is
+    generality: the paper's forgetting mechanism predicts that ANY semantics-based encoder
+    (shared feature space across domains) forgets under sequential arrival, and any disjoint-range
+    encoder does not. A Transformer with a learned embedding shares feature space (embedding mode);
+    with a scalar-id projection it keeps domains in disjoint magnitude ranges (scalar mode) --- the
+    same two conditions we test on DeepLog. Kept tiny (2 layers, 64-d, CPU-first).
+
+    Accepts exactly the tensors DeepLog does: [B, window, 1] float (scalar) or [B, window] long
+    (embedding), so evaluate()/_build_window_tensors need no changes."""
+
+    def __init__(self, num_keys: int, hidden_size: int = 64, num_layers: int = 2,
+                 input_mode: str = "scalar", embed_dim: int = 16, nhead: int = 4,
+                 window: int = 10):
+        super().__init__()
+        self.input_mode = input_mode
+        d_model = hidden_size
+        if input_mode == "embedding":
+            self.embed = nn.Embedding(num_keys, d_model)   # shared feature space across domains
+            self.proj = None
+        elif input_mode == "scalar":
+            self.embed = None
+            self.proj = nn.Linear(1, d_model)              # raw id magnitude -> disjoint ranges
+        else:
+            raise ValueError(f"unknown input_mode {input_mode!r}")
+        self.pos = nn.Parameter(torch.zeros(1, window, d_model))  # learned positional encoding
+        layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead,
+                                           dim_feedforward=2 * d_model, dropout=0.0,
+                                           batch_first=True)
+        self.encoder = nn.TransformerEncoder(layer, num_layers=num_layers)
+        self.fc = nn.Linear(d_model, num_keys)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.embed is not None:
+            h = self.embed(x)                  # [B, window, d_model]
+        else:
+            h = self.proj(x)                   # [B, window, 1] -> [B, window, d_model]
+        h = h + self.pos[:, :h.size(1), :]
+        h = self.encoder(h)                    # [B, window, d_model]
+        return self.fc(h[:, -1, :])            # logits over next event, [B, num_keys]
+
+
 # --------------------------------------------------------------------------------------
 # Windowing
 # --------------------------------------------------------------------------------------
@@ -155,6 +198,8 @@ class FedConfig:
     seed: int = 0
     input_mode: str = "scalar"     # 'scalar' (reference) or 'embedding' (mechanism test)
     embed_dim: int = 16
+    model_type: str = "deeplog"    # 'deeplog' (LSTM, default) or 'transformer' (generality test)
+    nhead: int = 4                 # attention heads when model_type='transformer'
 
 
 def train_federated(client_train_seqs: list[list[list[int]]], cfg: FedConfig,
@@ -170,6 +215,10 @@ def train_federated(client_train_seqs: list[list[list[int]]], cfg: FedConfig,
     device = cfg.device
 
     def _new_model():
+        if cfg.model_type == "transformer":
+            return TransformerLog(cfg.num_keys, cfg.hidden_size, cfg.num_layers,
+                                  input_mode=cfg.input_mode, embed_dim=cfg.embed_dim,
+                                  nhead=cfg.nhead, window=cfg.window).to(device)
         return DeepLog(cfg.num_keys, cfg.hidden_size, cfg.num_layers,
                        input_mode=cfg.input_mode, embed_dim=cfg.embed_dim).to(device)
 
