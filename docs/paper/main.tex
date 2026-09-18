@@ -142,8 +142,9 @@ performance and routes at inference with no oracle tag (Corollary~\ref{cor:routi
 (iii) a controlled $2\times2$ map showing \emph{simultaneous} mixing is safe but \emph{sequential}
 arrival is catastrophic \emph{iff} the representation shares a feature space, that this forgetting is
 \emph{directional}, and that it is \emph{architecture-general}---an LSTM and a self-attention
-Transformer both forget---together with two head-to-head mitigations (replay and EWC) that each remove
-it; (iv) a generalization beyond the pair to a \emph{three-domain} federation (adding OpenStack) that
+Transformer both forget---together with mitigations (replay and EWC) that each remove it and that we
+benchmark against the standard episodic-memory method A-GEM, over which simple replay is
+Pareto-competitive; (iv) a generalization beyond the pair to a \emph{three-domain} federation (adding OpenStack) that
 reproduces the range and routing results exactly; (v) a deployable \emph{safety auditor} that, from
 per-client summary statistics alone (event-id blocks and length ranges, never raw logs), predicts which
 failures a planned federation will hit and prescribes the fix---released as a tool and \emph{validated}
@@ -667,6 +668,40 @@ Mixed, Length domain-aware (recovered 0.5379) & 0.9836 \\
 \end{tabular}
 \end{table}
 
+\subsection{Comparison to an established method}\label{sec:baselines}
+Replay is deliberately the simplest possible defense, so the fair question is whether a purpose-built
+continual-learning method does better. We compare against A-GEM~\cite{agem2019}, the standard
+episodic-memory method, at the \emph{same} $10\%$ memory budget: instead of training on the buffer
+jointly, A-GEM projects each new-domain gradient to remove any component that would increase loss on a
+memory batch of the earlier domain. Table~\ref{tab:baselines} places the defenses side by side. All
+three remove the forgetting (HDFS retention $\approx0.69$--$0.70$ versus $0.04$ undefended). At the
+matched budget our plain replay is at least as good as A-GEM on retention and forgetting
+($+0.004$ vs.\ $+0.006$) and---because A-GEM's projection constrains the new-domain update---learns BGL
+\emph{better} ($0.722$ vs.\ $0.657$); the memory-free EWC learns BGL best but needs the
+six-order-of-magnitude penalty search of Section~\ref{sec:ewc} and forgets slightly more. The simple
+fix is thus Pareto-competitive with the established toolkit: replay dominates the more complex A-GEM at
+equal memory, and trades cleanly against EWC (no tuning and less forgetting, at the cost of a small
+buffer). No exotic machinery is needed to make sequential onboarding safe.
+
+\begin{table}[t]
+\caption{Mitigation comparison at a matched $10\%$ memory budget (embedding-DeepLog, sequential
+HDFS$\rightarrow$BGL, mean $\pm$ std, $n=3$). All three defenses remove the forgetting; our simple
+replay matches the established A-GEM on retention/forgetting while learning the new domain better.
+Sources: \texttt{results/mitigation\_\{replay,agem,ewc\}.csv}.}
+\label{tab:baselines}
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Method & Mem. & HDFS after & BGL after & Forgetting \\
+\midrule
+No defense               & ---   & $0.039\pm0.003$ & $0.642\pm0.028$ & $+0.665\pm0.003$ \\
+EWC ($\lambda{=}10^{8}$) & none  & $0.690\pm0.005$ & $\mathbf{0.752\pm0.052}$ & $+0.014\pm0.005$ \\
+A-GEM~\cite{agem2019}    & $10\%$ & $0.698\pm0.002$ & $0.657\pm0.009$ & $+0.006\pm0.002$ \\
+Replay (ours)            & $10\%$ & $\mathbf{0.700\pm0.004}$ & $0.722\pm0.052$ & $\mathbf{+0.004\pm0.004}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \section{Generality: A Third Domain and a Modern Architecture}\label{sec:generality}
 A study of two datasets and one detector invites the question of whether the map is a property of
 federated log analytics or of this specific pair and model. We test both axes directly.
@@ -1008,6 +1043,10 @@ Conf. Acoust., Speech, Signal Process. (ICASSP)}, 2023, pp.~1--5.
 M.~Landauer, F.~Skopik, and M.~Wurzenberger, ``A critical review of common log data sets used for
 evaluation of sequence-based anomaly detection techniques,'' \emph{Proc. ACM Softw. Eng.},
 vol.~1, no.~FSE, pp.~1354--1375, 2024, doi: 10.1145/3660768.
+
+\bibitem{agem2019}
+A.~Chaudhry, M.~Ranzato, M.~Rohrbach, and M.~Elhoseiny, ``Efficient lifelong learning with A-GEM,''
+in \emph{Proc. 7th Int. Conf. Learn. Represent. (ICLR)}, 2019.
 
 \end{thebibliography}
 

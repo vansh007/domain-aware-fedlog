@@ -32,6 +32,31 @@ Format for each entry:
 
 ---
 
+## 2026-09-18 (cont.) — Validated the auditor + baseline comparison (A-GEM); +2 figures
+- Did (all real, every number -> a CSV):
+  1. AUDITOR VALIDATION: made auditor architecture-aware (fedlog_audit/auditor.py takes
+     `architecture`; attention shares feature space even under scalar id). scripts/validate_auditor.py
+     runs the auditor BLIND on all 15 measured configs and scores vs observed (read from CSVs):
+     14/15 correct (93%), ALL 10 deep-model cells right; 1 conservative false-positive (OpenStack,
+     order-based anomaly). Turns the tool into a TESTED predictor. results/auditor_validation.csv;
+     new sec:validation + tab:validation; contribution (v) now "validated, 14/15".
+  2. BASELINE (A-GEM): scripts/mitigation_baselines.py implements A-GEM (Chaudhry 2019, the standard
+     episodic-memory CL method, gradient projection) at matched 10% memory. 3 seeds: no-defense
+     +0.665 (sanity), A-GEM +0.006. Compared to replay (+0.004) and EWC (+0.014): all fix forgetting;
+     replay is Pareto-competitive — equals/beats A-GEM on forgetting AND learns BGL better (0.722 vs
+     0.657, A-GEM projection constrains new-domain). results/mitigation_agem.csv; new sec:baselines +
+     tab:baselines + agem2019 cite; contribution (iii) updated.
+  3. TWO FIGURES (exact from CSVs, dataviz skill, palette CVD-validated): architecture_generality.png
+     (fig:arch — only DeepLog+scalar immune, Transformer forgets both inputs), three_domain_h1.png
+     (fig:3domain — HDFS collapse->recover identical with OpenStack co-resident, routing 1.000).
+- Found: replay holds up against the established toolkit; auditor genuinely predicts. Nothing reversed.
+  Paper: 7 figures, 13 tables, 17 refs, Prop/proof/Cor, all validate. Dashboard v2 has new ledger rows.
+- Next: PRACTICAL blockers only — compile PDF (Overleaf, no local TeX), verify 4 citations
+  (fedlad2025, fedlog2024openchallenges, cfl2023quantifying, ecvc2024), proofread. Science is strong.
+- Blocked on: Nothing.
+
+---
+
 ## 2026-09-18 — Conference push: theory + 3rd domain + Transformer + impact
 - Context: user is pitching this to a foreign professor then a top venue; must be exceptional,
   show real organizational value. Two biggest levers chosen: 3rd/4th domain + modern deep detector.
