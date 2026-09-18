@@ -1,0 +1,16 @@
+config,auditor_prediction,observed_value,observed_label,match,note
+DeepLog  scalar    simultaneous,SAFE,+0.0002,SAFE,OK,
+DeepLog  scalar    forward,SAFE,+0.0000,SAFE,OK,
+DeepLog  scalar    reverse,SAFE,-0.1247,SAFE,OK,
+DeepLog  embedding simultaneous,SAFE,-0.0025,SAFE,OK,
+DeepLog  embedding forward,FAILS,+0.6647,FAILS,OK,
+DeepLog  embedding reverse,SAFE,-0.1025,SAFE,OK,
+Transf.  scalar    simultaneous,SAFE,-0.0215,SAFE,OK,
+Transf.  scalar    forward,FAILS,+0.6357,FAILS,OK,
+Transf.  embedding simultaneous,SAFE,-0.0067,SAFE,OK,
+Transf.  embedding forward,FAILS,+0.3611,FAILS,OK,
+Length blind  2-dom  HDFS,FAILS,+0.0000,FAILS,OK,
+Length blind  2-dom  BGL,SAFE,+0.0332,SAFE,OK,
+Length blind  3-dom  HDFS,FAILS,+0.0000,FAILS,OK,
+Length blind  3-dom  BGL,SAFE,+0.0332,SAFE,OK,
+Length blind  3-dom  OpenStack,FAILS,+0.0000,SAFE,MISS,"conservative false-positive: range coupling is structurally real, but OpenStack anomalies are order-based so no Length detector existed to break"

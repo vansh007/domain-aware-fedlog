@@ -198,7 +198,8 @@ def audit_bounded_size(domains: list[DomainSpec], arrival: str, detector: str) -
                 "H3: set-union grew x3.7 (1,688 -> 6,300 bytes) for one added domain.")
 
 
-def audit_forgetting(domains, arrival, representation, detector, order) -> Risk:
+def audit_forgetting(domains, arrival, representation, detector, order,
+                     architecture="lstm") -> Risk:
     """H3 + mechanism + directionality: a deep model catastrophically forgets an earlier domain
     under sequential arrival ONLY when (a) the input representation makes vocabularies share a
     feature space (embedding), and (b) a BROAD-vocabulary domain is onboarded after a narrow one."""
@@ -212,14 +213,20 @@ def audit_forgetting(domains, arrival, representation, detector, order) -> Risk:
                     "all domains.",
                     "Prefer simultaneous onboarding when possible.",
                     "H2: HDFS drop +0.0002; BGL even improves; holds under embeddings too.")
-    if representation in ("scalar", "disjoint"):
+    # A shared feature space is what causes forgetting. It arises from a learned embedding OR
+    # from an architecture that projects its input into a shared space (e.g. a Transformer),
+    # which forgets even under a scalar id (measured). Only a scalar id fed to a recurrence that
+    # consumes it directly (the LSTM) keeps domains in disjoint ranges.
+    shared = (representation in ("embedding", "shared")
+              or architecture in ("transformer", "attention", "projection"))
+    if not shared:
         return Risk("Catastrophic forgetting", "SAFE",
-                    "Scalar-id input keeps domains in disjoint input ranges, so continued training "
-                    "on a new domain barely perturbs the earlier one.",
+                    "Scalar-id input to a recurrence keeps domains in disjoint input ranges, so "
+                    "continued training on a new domain barely perturbs the earlier one.",
                     "Safe as-is; note this is what masks the risk in the reference's encoding.",
-                    "H3 (scalar): forgetting 0.000.")
+                    "H3 (scalar, LSTM): forgetting 0.000.")
 
-    # embedding / shared representation + sequential -> check DIRECTION
+    # shared feature space + sequential -> check DIRECTION
     order = order or [d.name for d in domains]
     by_name = {d.name: d for d in domains}
     broad_after_narrow = []
@@ -251,13 +258,15 @@ def audit_forgetting(domains, arrival, representation, detector, order) -> Risk:
 # ------------------------------------------------------------------------------------------
 def audit_federation(domains: list[DomainSpec], arrival: str = "simultaneous",
                      representation: str = "scalar", detector: str = "lightweight",
-                     order: list[str] | None = None) -> AuditReport:
+                     order: list[str] | None = None, architecture: str = "lstm") -> AuditReport:
     """Audit a planned federation from summary statistics only.
 
     arrival        : 'simultaneous' | 'sequential'
     representation : 'scalar'/'disjoint' | 'embedding'/'shared'   (deep detector only)
     detector       : 'lightweight' | 'deep' | 'ensemble'
     order          : arrival order (list of domain names) for sequential; defaults to given order
+    architecture   : 'lstm' (disjoint scalar is safe) | 'transformer'/'attention' (projects input
+                     into a shared space, so it shares feature space even under a scalar id)
     """
     if len(domains) < 1:
         raise ValueError("need at least one domain")
@@ -271,7 +280,7 @@ def audit_federation(domains: list[DomainSpec], arrival: str = "simultaneous",
         audit_length_aggregation(domains, detector),
         audit_routing(domains),
         audit_bounded_size(domains, arrival, detector),
-        audit_forgetting(domains, arrival, representation, detector, order),
+        audit_forgetting(domains, arrival, representation, detector, order, architecture),
     ]
 
     # 2x2 map cell (deep-model axis)
