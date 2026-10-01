@@ -1,0 +1,4 @@
+failure,metric,healthy,failed,anomalies_total,caught_healthy,caught_failed,newly_missed,coverage_lost_pct,note
+"H1 range collapse (HDFS Length, domain-blind mixing)",anomaly recall,0.3689,0.0001,16838,6211,2,6209,99.97,domain-aware fix restores recall to the single-domain level
+"H3 catastrophic forgetting (deep model, new domain onboarded)",HDFS detection F1,0.7037,0.0390,,,,,94.46,fires silently the moment a new log source is onboarded; replay restores F1 to 0.700
+"C2 unbounded growth (set-union, per added domain)",model state bytes,1688,6300,,,,,273.22,x3.7 per domain; unbounded on an open stream

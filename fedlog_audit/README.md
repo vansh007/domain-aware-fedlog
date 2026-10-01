@@ -47,6 +47,30 @@ fedlog-audit \
 `--domain` is `name:idlo-idhi:lenmin-lenmax`. The CLI exits non-zero on any HIGH/CRITICAL
 risk, so it can gate a deployment pipeline.
 
+### CI/CD gate
+
+The auditor is designed to run in continuous integration before a federation change:
+
+```bash
+# fails the build if the planned onboarding would catastrophically forget
+fedlog-audit --domain hdfs:0-33:4-300 --domain bgl:33-427:1-900 \
+  --arrival sequential --representation embedding --detector deep \
+  --architecture transformer --order hdfs,bgl --json
+
+# the SAME rollout passes once the fix is declared
+fedlog-audit ... --mitigation replay --json
+```
+
+- `--architecture lstm|transformer` — an attention model shares feature space even under a
+  scalar id, so it is flagged where an LSTM would be safe.
+- `--mitigation domain-aware,replay,ewc,bounded-vocab` — declare the fixes already in place;
+  the auditor clears the risks they address, so a *fixed* configuration passes the gate.
+- `--json` — machine-readable report for logging/gating.
+
+A ready-to-use GitHub Action is in `.github/workflows/fedlog-audit.yml`. The auditor's
+predictions are validated against measured outcomes (14/15 configurations;
+`results/auditor_validation.csv`).
+
 ## Python API
 
 ```python

@@ -1,0 +1,6 @@
+safeguard,overhead_bytes,baseline_bytes,note
+Domain-aware ranges (2 domains),32,16,2 integers per domain; vs 2 for the global range
+Domain-aware ranges (3 domains),48,16,2 integers per domain; vs 2 for the global range
+Replay buffer (10% of earlier domain),129456,,"558 sequences x ~29 events; raw ids, no parameters"
+DeepLog model (reference point),355436,,the replay buffer is smaller than the model it protects
+Pre-deployment auditor (per run),,,"0.002 ms per audit, summary stats only, no raw logs"

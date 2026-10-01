@@ -82,6 +82,23 @@ class AuditReport:
     def worst_level(self) -> str:
         return max((r.level for r in self.risks), key=lambda l: _ORDER[l], default="SAFE")
 
+    def to_dict(self) -> dict:
+        """Machine-readable report, for CI/CD gating and logging (fedlog-audit --json)."""
+        return {
+            "overall": self.worst_level,
+            "cell": self.cell,
+            "arrival": self.arrival,
+            "representation": self.representation,
+            "detector": self.detector,
+            "order": self.order,
+            "domains": [{"name": d.name, "id_range": list(d.id_range),
+                         "normal_length_range": list(d.normal_length_range),
+                         "vocab_size": d.vocab_size} for d in self.domains],
+            "risks": [{"name": r.name, "level": r.level, "finding": r.finding,
+                       "recommendation": r.recommendation, "evidence": r.evidence}
+                      for r in sorted(self.risks, key=lambda r: -r.rank)],
+        }
+
     def render(self) -> str:
         icon = {"SAFE": "OK ", "INFO": "i  ", "LOW": "·  ", "MEDIUM": "!  ",
                 "HIGH": "!! ", "CRITICAL": "XX "}
@@ -258,7 +275,8 @@ def audit_forgetting(domains, arrival, representation, detector, order,
 # ------------------------------------------------------------------------------------------
 def audit_federation(domains: list[DomainSpec], arrival: str = "simultaneous",
                      representation: str = "scalar", detector: str = "lightweight",
-                     order: list[str] | None = None, architecture: str = "lstm") -> AuditReport:
+                     order: list[str] | None = None, architecture: str = "lstm",
+                     mitigations: "set[str] | None" = None) -> AuditReport:
     """Audit a planned federation from summary statistics only.
 
     arrival        : 'simultaneous' | 'sequential'
@@ -282,6 +300,21 @@ def audit_federation(domains: list[DomainSpec], arrival: str = "simultaneous",
         audit_bounded_size(domains, arrival, detector),
         audit_forgetting(domains, arrival, representation, detector, order, architecture),
     ]
+
+    # Declared mitigations clear the risk they address (so a FIXED config can pass the gate).
+    mit = {m.lower().replace("-", "_") for m in (mitigations or set())}
+    _MIT = {"domain_aware": ("Range aggregation (Length)", "domain-aware per-domain ranges"),
+            "replay": ("Catastrophic forgetting", "a replay buffer"),
+            "ewc": ("Catastrophic forgetting", "EWC"),
+            "bounded_vocab": ("Bounded model size", "a bounded/pruned vocabulary")}
+    for key, (risk_name, how) in _MIT.items():
+        if key in mit:
+            for i, r in enumerate(risks):
+                if r.name == risk_name and r.level not in ("SAFE", "INFO"):
+                    risks[i] = Risk(risk_name, "SAFE",
+                                    f"Mitigated: the deployment declares {how}.",
+                                    f"Keep {how} in place; re-audit if the configuration changes.",
+                                    r.evidence)
 
     # 2x2 map cell (deep-model axis)
     if detector == "deep":

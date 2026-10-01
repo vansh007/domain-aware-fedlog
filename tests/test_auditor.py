@@ -75,6 +75,31 @@ def test_setunion_growth_under_evolution():
     assert _risk(evolving, "Bounded model size").level == "MEDIUM"
 
 
+def test_declared_mitigations_clear_their_risk():
+    """A declared fix clears the risk it addresses, so a fixed config passes the gate."""
+    # forgetting: CRITICAL without a fix, SAFE once replay is declared
+    base = audit_federation([HDFS, BGL], arrival="sequential", representation="embedding",
+                            detector="deep", order=["hdfs", "bgl"])
+    fixed = audit_federation([HDFS, BGL], arrival="sequential", representation="embedding",
+                             detector="deep", order=["hdfs", "bgl"], mitigations={"replay"})
+    assert _risk(base, "Catastrophic forgetting").level == "CRITICAL"
+    assert _risk(fixed, "Catastrophic forgetting").level == "SAFE"
+    assert fixed.worst_level in ("SAFE", "INFO", "LOW")
+    # range collapse: HIGH without a fix, SAFE once domain-aware is declared
+    lw = audit_federation([HDFS, BGL], arrival="simultaneous", detector="lightweight")
+    lw_fixed = audit_federation([HDFS, BGL], arrival="simultaneous", detector="lightweight",
+                                mitigations={"domain-aware"})
+    assert _risk(lw, "Range aggregation (Length)").level == "HIGH"
+    assert _risk(lw_fixed, "Range aggregation (Length)").level == "SAFE"
+
+
+def test_transformer_scalar_forgets():
+    """Architecture-aware: a Transformer shares feature space even under scalar id -> CRITICAL."""
+    r = audit_federation([HDFS, BGL], arrival="sequential", representation="scalar",
+                         detector="deep", order=["hdfs", "bgl"], architecture="transformer")
+    assert _risk(r, "Catastrophic forgetting").level == "CRITICAL"
+
+
 def _run_all():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

@@ -32,6 +32,31 @@ Format for each entry:
 
 ---
 
+## 2026-10-02 — Organisational-impact push (project-first): stakes, CI-ready auditor, docs
+- Context: user wants the work to show CRITICAL importance for organisations today. Project
+  improvements first, paper later, document everything for the paper.
+- Did (all numbers measured/derived from real CSVs; no fabrication):
+  1. IMPACT ANALYSIS (scripts/impact_analysis.py -> results/impact_blindspot.csv, impact_overhead.csv):
+     SILENT BLIND SPOT — H1 range collapse drops HDFS Length recall 0.3689->0.0001 (99.97% lost;
+     6,209 of 16,838 anomalies newly missed, from baseline/ensemble TP/FN); H3 forgetting 94.5% F1
+     lost; C2 x3.7/domain. COST OF FIX (measured) — domain-aware ranges 32 B (2 dom)/48 B (3 dom);
+     replay buffer ~126 KB < DeepLog model 347 KB; auditor 0.002 ms/run. The asymmetry (catastrophic
+     silent risk vs ~free fix) is the headline for the org-importance story.
+  2. AUDITOR CI-READY: added --json, --architecture {lstm,transformer}, --mitigation
+     {domain-aware,replay,ewc,bounded-vocab} (declared fixes clear the risk they address so a FIXED
+     config passes the gate), AuditReport.to_dict(). .github/workflows/fedlog-audit.yml = GitHub Action
+     that FAILS an unsafe onboarding and PASSES once a mitigation is declared. 9 auditor tests pass.
+  3. DOCUMENTATION: docs/IMPACT_AND_MOTIVATION.md — living research notes feeding the paper
+     (deployment contexts, measured blind-spot + cost tables, compliance angle GDPR/HIPAA/PCI-DSS/
+     NIS2/NIST [cite-marked], threat model, candidate framings, paper to-do). Keep appending.
+- Found: 99.97% blind-spot vs 32-byte fix is a very strong, honest organisational hook. Auditor is
+  now a real CI tool, not just a library.
+- Next: fold these numbers into the paper (Intro stakes paragraph + Deployment Implications tables),
+  add an impact figure (blind-spot vs fix-cost), then verify citations + compile. Paper edits pending.
+- Blocked on: Nothing.
+
+---
+
 ## 2026-09-18 (cont.) — Validated the auditor + baseline comparison (A-GEM); +2 figures
 - Did (all real, every number -> a CSV):
   1. AUDITOR VALIDATION: made auditor architecture-aware (fedlog_audit/auditor.py takes

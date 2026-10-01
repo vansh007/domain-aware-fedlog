@@ -56,6 +56,13 @@ def main(argv=None) -> int:
                     default="lightweight")
     ap.add_argument("--order", default=None,
                     help="comma-separated arrival order for sequential (e.g. hdfs,bgl)")
+    ap.add_argument("--architecture", choices=["lstm", "transformer", "attention"], default="lstm",
+                    help="deep-model architecture; attention shares feature space even under scalar id")
+    ap.add_argument("--mitigation", default=None,
+                    help="comma-separated fixes already in place: domain-aware,replay,ewc,bounded-vocab "
+                         "(clears the risk they address, so a fixed config can pass the gate)")
+    ap.add_argument("--json", action="store_true",
+                    help="emit the report as JSON (for CI/CD gating and logging)")
     ap.add_argument("--example", action="store_true",
                     help="run the canonical HDFS+BGL example from the paper and exit")
     args = ap.parse_args(argv)
@@ -67,9 +74,15 @@ def main(argv=None) -> int:
 
     domains = [_parse_domain(s) for s in args.domain]
     order = args.order.split(",") if args.order else None
+    mitigations = set(args.mitigation.split(",")) if args.mitigation else None
     report = audit_federation(domains, arrival=args.arrival, representation=args.representation,
-                              detector=args.detector, order=order)
-    print(report.render())
+                              detector=args.detector, order=order, architecture=args.architecture,
+                              mitigations=mitigations)
+    if args.json:
+        import json
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(report.render())
     # non-zero exit if any HIGH/CRITICAL risk, so it is usable as a CI gate
     return 1 if report.worst_level in ("HIGH", "CRITICAL") else 0
 

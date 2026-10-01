@@ -1,0 +1,43 @@
+# Pre-deployment safety gate for a federated log-anomaly-detection rollout.
+#
+# The fedlog-audit tool reads only per-client SUMMARY STATISTICS (each domain's event-id block and
+# normal-length range) --- never raw logs --- and fails the build if a planned federation would hit a
+# known silent failure (range-aggregation collapse, unbounded set-union growth, or directional
+# catastrophic forgetting). Point `--domain` at your real federation's stats; the job's non-zero exit
+# blocks the change until the prescribed fix is applied. See docs/IMPACT_AND_MOTIVATION.md sec 5/7.
+name: fedlog-audit safety gate
+
+on:
+  push:
+    paths: ["configs/**", "fedlog_audit/**", ".github/workflows/fedlog-audit.yml"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the auditor (zero third-party deps)
+        run: pip install -e .
+      - name: Unit tests for the auditor rules
+        run: python tests/test_auditor.py
+      - name: Auditor catches an unsafe onboarding (expects a non-zero exit)
+        run: |
+          # '!' passes the step only if the auditor correctly FAILS this risky config
+          # (sequential embedding/transformer onboarding -> catastrophic forgetting).
+          ! fedlog-audit \
+            --domain hdfs:0-33:4-300 \
+            --domain bgl:33-427:1-900 \
+            --arrival sequential --representation embedding --detector deep \
+            --architecture transformer --order hdfs,bgl --json
+      - name: The same rollout passes once the replay mitigation is declared (exit 0)
+        run: |
+          fedlog-audit \
+            --domain hdfs:0-33:4-300 \
+            --domain bgl:33-427:1-900 \
+            --arrival sequential --representation embedding --detector deep \
+            --architecture transformer --order hdfs,bgl --mitigation replay --json
