@@ -1,137 +1,88 @@
-# Domain-Aware Federated Log Anomaly Detection under Sequential Domain Arrival
+# Domain-Aware Federated Log Anomaly Detection — A Safety Map for Heterogeneous, Evolving Federations
 
-Testing whether the invariance and bounded-growth properties reported for federated
-log anomaly detection survive a **heterogeneous, evolving** federation.
+When organizations run **federated** anomaly detection over **different, evolving** log sources
+(the real deployment), the detectors can **silently stop working** — no error, no crash — losing up
+to **99.97 % of their anomaly coverage**. This project shows exactly when that happens, proves why,
+and ships fixes that cost a few bytes, plus a **pre-deployment auditor** that catches the risk before
+you train.
 
-**Status:** Research scaffold. Not yet run. See `docs/TILLNOW.md` for progress.
+> **The headline, in measured numbers:** domain-blind mixing drops HDFS Length recall `0.369 → 0.0001`
+> (6,209 of 16,838 anomalies silently missed); onboarding a new domain erases `94.5 %` of a deep
+> model's detection. The safeguards cost **48 bytes** (per-domain ranges), a replay buffer **smaller
+> than the model it protects**, and a **0.002 ms** check. See `results/impact_asymmetry.png`.
 
-**Target venue:** IEEE Access.
-
----
-
-## The idea in three lines
-
-1. Prior work evaluates federated log anomaly detection only where every client holds
-   the *same* dataset (quantity skew).
-2. We put HDFS clients and BGL clients in *one* federation, and make new domains arrive
-   *sequentially*.
-3. We test whether "lightweight methods are distribution-invariant" and "model size is
-   bounded" still hold. We predict they don't — and propose a domain-aware aggregation
-   fix.
-
-Full reasoning: `docs/RULES_AND_GOALS.md`. Reference-paper facts:
-`docs/REFERENCE_PAPER_NOTES.md`.
+Target venue: IEEE Access. Paper source: [`docs/paper/main.tex`](docs/paper/main.tex).
 
 ---
 
-## Quick start
+## Why it matters to organizations
 
-> This scaffold gives you the structure, the merged-vocabulary dataloader design, the
-> metrics, configs, and plotting. The reference implementation's model code is **not**
-> bundled (it is GPL-3.0 — clone it yourself). Week 1 wires the two together.
+Federated log analytics is used precisely where logs **can't** be centralized — banks, healthcare,
+telecom/IoT, multi-tenant clouds, critical infrastructure — all of which monitor **many** different
+log sources and **add new ones continuously**. Continuous *effective* monitoring is also a mandated
+control (GDPR Art. 32, HIPAA, PCI-DSS, NIS2). A monitoring system that silently degrades on the next
+onboarding is both a security blind spot and a compliance gap. Full motivation and the measured stakes:
+[`docs/IMPACT_AND_MOTIVATION.md`](docs/IMPACT_AND_MOTIVATION.md).
 
-### 1. Environment
+## What we found
 
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
+- **H1 — range aggregation collapses** on the tighter domain under mixing (HDFS Length `0.538 → 0.000`);
+  a **domain-aware** fix restores it (`→ 0.561`), routing with **no oracle tag** (100 % accuracy). We
+  **prove** this as a containment condition (Proposition 1).
+- **H2 — simultaneous mixing is safe** for deep models; **H3 — sequential onboarding catastrophically
+  forgets** the earlier domain (`0.70 → 0.04`) *iff* the representation shares a feature space. A clean
+  **2×2 safety map**; the failure is **directional** (broad-after-narrow).
+- **Generality:** holds across **3 domains** (HDFS, BGL, OpenStack) and **2 architectures** (LSTM **and**
+  a Transformer — which forgets even under the scalar input that leaves the LSTM immune).
+- **Fixes, compared:** a small **replay buffer** (`0.665 → 0.004`) and **EWC**, benchmarked against
+  **A-GEM** — simple replay is Pareto-competitive. All with near-zero overhead.
+- **A validated auditor:** from summary statistics alone it predicts which failures a planned
+  federation will hit — correct on **14/15** measured configurations.
 
-Python 3.12.x recommended (matches the reference repo).
-
-### 2. Get the reference implementation (Week 1)
-
-```bash
-git clone https://github.com/ait-aecid/comparison-fed-centr-efficient-ad reference_repo
-# Read reference_repo/Readme.md. Note: they use Flower + config YAMLs, like us.
-```
-
-### 3. Get the data
-
-Download HDFS and BGL from LogHub (https://github.com/logpai/loghub) into `data/`.
-See `data/README.md` for the expected layout. Datasets are **git-ignored** — never
-commit raw logs.
-
-### 4. Week-1 gate: reproduce the baseline
+## The deployable auditor (`fedlog_audit`)
 
 ```bash
-python scripts/reproduce_baseline.py --dataset hdfs
-python scripts/reproduce_baseline.py --dataset bgl
+pip install -e .                 # auditor core has zero third-party deps
+fedlog-audit --example           # the canonical HDFS+BGL+OpenStack audit
+
+# gate a planned rollout in CI (exits non-zero on HIGH/CRITICAL risk):
+fedlog-audit --domain hdfs:0-33:4-300 --domain bgl:33-427:1-900 \
+  --arrival sequential --representation embedding --detector deep \
+  --architecture transformer --order hdfs,bgl --json
+# ...passes once the fix is declared:
+fedlog-audit ... --mitigation replay
 ```
 
-If these do not roughly match the reference paper's numbers (see
-`docs/REFERENCE_PAPER_NOTES.md`), **stop and report** before writing any mixed-domain
-code. That is the single most important checkpoint in the project.
+It reads only each domain's event-id block and length range — **never raw logs** — preserving the
+federated privacy model. Ready-to-use GitHub Action: [`.github/workflows/fedlog-audit.yml`](.github/workflows/fedlog-audit.yml).
+Interactive dashboard: see the Artifact link in the project notes.
 
-### 5. Week-2: the experiment that matters
+## Reproduce
 
 ```bash
-python scripts/run_experiment.py --config configs/hdfs_bgl_mixed.yaml
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt && pip install -e .
+./reproduce.sh                   # runs the lightweight experiments + analyses + figures
+python tests/test_auditor.py     # 9 auditor unit tests
 ```
+The deep-model runs (DeepLog/Transformer, H2/H3/mechanism/mitigations) are CPU-bound and slower; each
+has its own `scripts/*.py`. Every number in the paper traces to a CSV in `results/`.
 
-This is the config that does not exist in the reference repo. It builds one federation
-with 3 HDFS clients + 2 BGL clients over a merged vocabulary, and reports per-domain F1.
+## Repository map
 
----
-
-## Repository layout
-
-```
-domain-aware-fedlog/
-├── CLAUDE.md                  # read first — project memory for Claude Code
-├── README.md                  # you are here
-├── requirements.txt
-├── configs/                   # experiment configs (YAML)
-│   ├── hdfs_iid.yaml          # single-domain baseline
-│   ├── bgl_iid.yaml           # single-domain baseline
-│   ├── hdfs_bgl_mixed.yaml    # ⭐ the mixed federation (H1, H2)
-│   └── sequential_arrival.yaml# ⭐ HDFS then BGL (H3)
-├── src/
-│   ├── dataloader.py          # ⭐ merged-vocabulary loader — the core new work
-│   ├── vocabulary.py          # global template dictionary across domains
-│   ├── methods/               # anomaly detection methods
-│   │   ├── length.py          # range-based (predicted to break under mixing)
-│   │   ├── known_events.py    # set-union based
-│   │   └── deeplog_stub.py    # thin wrapper over reference DeepLog
-│   ├── aggregation.py         # FedAvg + our domain-aware strategy (stub)
-│   └── metrics.py             # F1, forgetting, model-size growth
-├── scripts/
-│   ├── reproduce_baseline.py  # Week-1 gate
-│   ├── run_experiment.py      # main entry point
-│   ├── gather_results.py      # collate results/*.csv
-│   └── plot_results.py        # forgetting curve, size-growth plot
-├── experiments/               # one append-only log per run
-├── results/                   # CSVs + plots (git-ignored)
-└── docs/
-    ├── TILLNOW.md             # progress log — update every session
-    ├── RULES_AND_GOALS.md     # the "why", scope, non-negotiables
-    ├── REFERENCE_PAPER_NOTES.md # distilled facts (avoid re-reading the PDF)
-    └── DECISIONS.md           # decision log with rationale
-```
-
-⭐ = where the actual contribution lives.
-
----
-
-## What is real vs stub in this scaffold
-
-| Component | State |
+| Path | What |
 |---|---|
-| Project structure, configs, docs | Complete |
-| `vocabulary.py` (merged dictionary) | Working reference implementation |
-| `dataloader.py` | Working skeleton + the merge logic; parser hook is a TODO |
-| `methods/length.py`, `known_events.py` | Working (these are simple by design) |
-| `metrics.py` (F1, forgetting, size) | Working |
-| `deeplog_stub.py` | Stub — wires to the reference repo's DeepLog |
-| `aggregation.py` domain-aware strategy | **Stub — this is your Week-4 research** |
-| Any experimental numbers | **None. You produce these by running.** |
+| `fedlog_audit/` | the pip-installable safety auditor + CLI (the product) |
+| `src/` | merged cross-domain vocabulary, dataloader, detectors, aggregation, metrics |
+| `scripts/` | one runnable file per experiment + plotting + impact analysis |
+| `results/` | CSVs and figures (every paper number traces here) |
+| `docs/paper/main.tex` | the paper (8 figures, 13 tables, a proposition + proof) |
+| `docs/IMPACT_AND_MOTIVATION.md` | organizational-importance research notes |
+| `docs/RESEARCH_LOG.md`, `docs/TILLNOW.md` | lab notebook + session handoff |
 
----
+## Honest limitations
 
-## License
-
-Your own code: choose a license (MIT is fine for a paper artifact). Note the reference
-implementation is **GPL-3.0**; if you import or adapt its code directly, GPL obligations
-apply to derived files. Keeping our wrappers separate (calling their scripts as a
-subprocess) avoids tangling licenses — see `docs/DECISIONS.md`.
+Our federated DeepLog operates at F1 ≈ 0.70, not the reference's ~0.93 (a documented scalar-input
+capacity ceiling; the forgetting result is a *relative* effect, unaffected). OpenStack ships only 4
+labelled (order-based) anomalies, so it is used for the range/routing generality, not as a headline
+detection score. Both are discussed openly in the paper's Threats to Validity.

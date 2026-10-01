@@ -1,11 +1,15 @@
-# Core — the scaffold runs on these alone
-PyYAML>=6.0
-matplotlib>=3.7
+# Runtime dependencies for the experiments (CPU-first; everything runs on a laptop).
+# The fedlog_audit auditor itself has ZERO third-party deps — see pyproject.toml.
 
-# For Week 1 when you wire the reference DeepLog (their repo pins these too)
-# flwr[simulation]>=1.8      # Flower — federated learning framework
-# torch>=2.2                 # DeepLog / LogAnomaly LSTM (CPU build is fine)
-# numpy>=1.26
+PyYAML>=6.0          # experiment configs
+numpy>=1.26          # windowing / arrays
+torch>=2.2           # DeepLog (LSTM) and the Transformer detector; CPU build is fine
+matplotlib>=3.7      # figures
 
-# The reference repo uses Python 3.12.3. Match it to avoid surprises.
-# Install their extras from reference_repo/requirements.txt after cloning.
+# Optional (used by specific scripts; install if you run them)
+scipy>=1.11          # paired t-tests in the stats reporting
+drain3>=0.9.11       # Drain log parsing for the 3rd domain (scripts/parse_openstack.py)
+python-docx>=1.1     # docx export (docs/Literature_Review.docx generator)
+
+# Reference repo (reference_repo/, GPL-3.0) pins torch==2.6.0, flwr==1.12.0 separately;
+# it is NOT required to run our code. Python 3.10+ (reference uses 3.12.3).
