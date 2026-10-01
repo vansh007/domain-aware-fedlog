@@ -344,6 +344,46 @@
   </section>
 
   <!-- ============ EVIDENCE LEDGER ============ -->
+  <!-- ============ ORGANIZATIONAL IMPACT ============ -->
+  <section class="block">
+    <div class="section-head">
+      <h2>Why this matters: catastrophic risk, near-zero fix</h2>
+      <p class="lede" style="font-size:15px">The failures are <b>silent</b> — no error, no crash — so a
+        monitoring system keeps reporting healthy while it has quietly stopped detecting. The risk is
+        enormous; the fix is almost free. All figures measured (<code class="mono">results/impact_*.csv</code>).</p>
+    </div>
+    <div style="display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+      <div class="card" style="border-color:color-mix(in srgb,var(--critical) 34%,transparent)">
+        <div class="eyebrow" style="color:var(--critical)">The risk — detection silently lost</div>
+        <div style="display:flex;gap:18px;margin-top:12px;flex-wrap:wrap">
+          <div><div class="mono" style="font-size:32px;font-weight:700;color:var(--critical);line-height:1">99.97%</div>
+            <div style="font-size:12.5px;color:var(--ink-2);margin-top:4px">HDFS Length coverage lost under mixing<br>(6,209 of 16,838 anomalies newly missed)</div></div>
+          <div><div class="mono" style="font-size:32px;font-weight:700;color:var(--critical);line-height:1">94.5%</div>
+            <div style="font-size:12.5px;color:var(--ink-2);margin-top:4px">deep-model detection lost<br>the moment a new domain is onboarded</div></div>
+        </div>
+      </div>
+      <div class="card" style="border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+        <div class="eyebrow" style="color:var(--accent-2)">The cost — the safeguard</div>
+        <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">
+          <div><div class="mono" style="font-size:28px;font-weight:700;color:var(--accent-2);line-height:1">48 B</div>
+            <div style="font-size:12.5px;color:var(--ink-2);margin-top:4px">per-domain ranges<br>(3 domains)</div></div>
+          <div><div class="mono" style="font-size:28px;font-weight:700;color:var(--accent-2);line-height:1">126 KB</div>
+            <div style="font-size:12.5px;color:var(--ink-2);margin-top:4px">replay buffer —<br>smaller than the 347 KB model</div></div>
+          <div><div class="mono" style="font-size:28px;font-weight:700;color:var(--accent-2);line-height:1">0.002 ms</div>
+            <div style="font-size:12.5px;color:var(--ink-2);margin-top:4px">auditor check<br>(summary stats, no raw logs)</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="viz callout ok" style="margin-top:16px">
+      <b>Deploy-time gate.</b> <code class="mono">fedlog-audit</code> exits non-zero on a HIGH/CRITICAL
+      configuration and passes once the fix is declared
+      (<code class="mono">--mitigation replay</code>) — turning a silent runtime risk into a
+      pre-deployment CI check. Compliance regimes (GDPR Art. 32, HIPAA, PCI-DSS, NIS2) require
+      <i>ongoing effective</i> monitoring; a detector that silently degrades on the next onboarding is a
+      control gap this check catches.
+    </div>
+  </section>
+
   <section class="block">
     <div class="section-head">
       <h2>Evidence ledger</h2>
