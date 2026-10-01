@@ -69,8 +69,9 @@ for both failures: a domain-aware aggregation that restores the collapsed range 
 oracle domain tag, at $100\%$ inferred-routing accuracy), and, for the forgetting, both a small replay
 buffer ($\approx10\%$ of the earlier domain's data, cutting forgetting from $0.665$ to $0.004$) and a
 memory-free EWC alternative, which we compare directly. The map is not specific to this setting: we
-\emph{prove} the range collapse as a containment condition, confirm it in a three-domain federation
-(adding OpenStack), and show the forgetting is architecture-general---a Transformer forgets under
+\emph{prove} the range collapse as a containment condition, confirm it in three- and four-domain
+federations (adding OpenStack and Hadoop, where a broader domain demotes the prior ``widener'' to a
+victim exactly as predicted), and show the forgetting is architecture-general---a Transformer forgets under
 sequential arrival too, and does so even under the scalar input that leaves the LSTM immune, because a
 shared feature space, not any one encoder, is the cause. Because these failures are silent and
 security-critical in production, we distill the whole map into a deployable, summary-statistics-only
@@ -147,8 +148,9 @@ arrival is catastrophic \emph{iff} the representation shares a feature space, th
 \emph{directional}, and that it is \emph{architecture-general}---an LSTM and a self-attention
 Transformer both forget---together with mitigations (replay and EWC) that each remove it and that we
 benchmark against the standard episodic-memory method A-GEM, over which simple replay is
-Pareto-competitive; (iv) a generalization beyond the pair to a \emph{three-domain} federation (adding OpenStack) that
-reproduces the range and routing results exactly; (v) a deployable \emph{safety auditor} that, from
+Pareto-competitive; (iv) a generalization beyond the pair to \emph{three- and four-domain} federations (adding OpenStack and
+Hadoop) that reproduces the range and routing results exactly and confirms the containment condition is
+\emph{relative}---a broader domain demotes the prior widener to a victim; (v) a deployable \emph{safety auditor} that, from
 per-client summary statistics alone (event-id blocks and length ranges, never raw logs), predicts which
 failures a planned federation will hit and prescribes the fix---released as a tool and \emph{validated}
 as a predictor, correct on $14$ of $15$ measured configurations; and (vi) a CPU-only artifact in which
@@ -705,11 +707,12 @@ Replay (ours)            & $10\%$ & $\mathbf{0.700\pm0.004}$ & $0.722\pm0.052$ &
 \end{tabular}
 \end{table}
 
-\section{Generality: A Third Domain and a Modern Architecture}\label{sec:generality}
+\section{Generality: More Domains and a Modern Architecture}\label{sec:generality}
 A study of two datasets and one detector invites the question of whether the map is a property of
-federated log analytics or of this specific pair and model. We test both axes directly.
+federated log analytics or of this specific pair and model. We test both axes directly---adding third
+and fourth domains, and a categorically different architecture.
 
-\subsection{A third log domain}\label{sec:3domain}
+\subsection{A third and fourth log domain}\label{sec:3domain}
 We add OpenStack~\cite{du2017deeplog} as a third domain, parsed from the LogHub~\cite{zhu2023loghub}
 raw logs into the same event-id-sequence format (Drain templates, grouped per VM instance); it occupies
 a third disjoint vocabulary block $[427,443)$ for a merged $443$-event space. OpenStack is deliberately
@@ -754,6 +757,30 @@ the two-domain case with OpenStack also co-resident, and vocabulary-block routin
 three disjoint id blocks. OpenStack's order-based anomalies are invisible to both lightweight
 detectors, marking it a distinct third profile.}
 \label{fig:3domain}
+\end{figure}
+
+\textbf{A fourth domain, and a relative-containment test.} We add Hadoop~\cite{zhu2023loghub} as a
+fourth domain ($55$ applications, $258$ event types, parsed per application), chosen because its
+normal-length range is \emph{broad}---its maximum ($3{,}666$) exceeds BGL's ($900$). Proposition~\ref{prop:collapse}
+then makes a non-trivial prediction: in the four-domain federation $\{$HDFS, BGL, OpenStack, Hadoop$\}$,
+Hadoop becomes the new widener and should swallow \emph{BGL}, which was itself the widener (and hence
+safe) in the two- and three-domain cases. Fig.~\ref{fig:4domain} confirms it exactly: HDFS collapse and
+recovery is unchanged ($0.000\rightarrow0.561$), routing stays exact across all four disjoint blocks
+($1.000$), and BGL's domain-blind Length drops from $0.033$ to $0.001$---BGL \emph{flips from widener to
+victim}---while domain-aware aggregation recovers it. Hadoop's own anomalies are length-detectable
+(Length $0.75$, domain-aware $0.80$), a fourth, different profile. The containment relation is thus
+\emph{relative}: a domain is safe only until a broader one joins, and the proposition predicts which,
+for any membership. (Because Hadoop ships only $11$ normal applications, it uses a larger training
+fraction than the $1\%$ regime; we report this openly.)
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{four_domain_h1.png}
+\caption{Four domains, and a relative-containment test. Adding Hadoop (whose normal length exceeds
+BGL's) makes it the new widener: BGL's domain-blind Length drops $0.033\rightarrow0.001$---it flips
+from widener to victim, as Proposition~\ref{prop:collapse} predicts---while HDFS collapse/recovery is
+unchanged and routing stays exact across four disjoint blocks. Hadoop's anomalies are length-detectable.}
+\label{fig:4domain}
 \end{figure}
 
 \subsection{A modern architecture: attention forgets too}\label{sec:arch}
@@ -951,13 +978,14 @@ regime. Importantly, the H3 forgetting finding is a
 scalar), and does not depend on the absolute level; H2 and H3 were run at 12 rounds, already at the
 plateau.
 
-\textbf{Other threats.} We use three domains (HDFS, BGL, OpenStack): the range and routing results
-hold with a third domain co-resident (Section~\ref{sec:3domain}) and the forgetting holds across two
-architectures (Section~\ref{sec:arch}), so the findings are not artifacts of a single pair or model.
-OpenStack ships only four labelled anomalies, a documented limitation of that benchmark, so we use it
-for the range/routing generality rather than as a headline detection score; scaling to many domains
-and to alert-labelled sources (Thunderbird, Spirit), which require a different windowing pipeline,
-remains future work. Known Events shows high seed
+\textbf{Other threats.} We use four domains (HDFS, BGL, OpenStack, Hadoop): the range and routing
+results hold with third and fourth domains co-resident (Section~\ref{sec:3domain}) and the forgetting
+holds across two architectures (Section~\ref{sec:arch}), so the findings are not artifacts of a single
+pair or model. The two added domains are small (OpenStack ships only four labelled, order-based
+anomalies; Hadoop only $55$ applications, so it uses a larger-than-$1\%$ training fraction), so we use
+them for the range/routing generality and the relative-containment test rather than as headline
+detection scores, and report their sizes openly; scaling to many domains and to alert-labelled sources
+(Thunderbird, Spirit), which require a different windowing pipeline, remains future work. Known Events shows high seed
 variance on HDFS ($0.56\pm0.12$), which we report openly. Our DeepLog evaluation treats sequences
 shorter than the window as normal; because the single-vs-mixed comparison uses an identical harness,
 the relative effect is unaffected. ECVC uses a transductive (test-set) threshold, following the

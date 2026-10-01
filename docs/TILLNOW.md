@@ -32,6 +32,26 @@ Format for each entry:
 
 ---
 
+## 2026-10-02 (cont.) — 4th domain (Hadoop): containment is RELATIVE (widener->victim)
+- Did: Added Hadoop as a 4th domain (scripts/parse_hadoop.py: 55 apps, 11 normal/44 abnormal, 258
+  event types, grouped per application). build_federation gained train_frac (per-domain dict + floor
+  n_clients) so tiny Hadoop (11 normal, 1%=0) gets an adequate pool; big datasets unchanged (regression
+  verified). scripts/run_h1_ndomain.py = general N-domain H1+routing.
+- Found (results/h1_4domain.csv, 5 seeds, {HDFS,BGL,OpenStack,Hadoop}): HDFS collapse+recover IDENTICAL
+  (0.000->0.561); ROUTING 1.000 across 4 disjoint blocks; NEW INSIGHT — BGL flips from widener to VICTIM
+  (domain-blind Length 0.033->0.0008) because Hadoop (normal max 3666 > BGL 900) is the new widener,
+  exactly as Proposition 1 predicts; domain-aware recovers BGL. Hadoop anomalies ARE length-detectable
+  (blind 0.75, da 0.80) -- a 4th distinct profile. => containment is RELATIVE: a domain is safe only
+  until a broader one joins.
+- Wired into paper: sec:3domain extended (4th-domain paragraph + fig:4domain), abstract/contrib(iv)/
+  threats/sec:generality title updated to "three- and four-domain". plot kind `4domain` ->
+  four_domain_h1.png. Paper validates: 9 figures, 13 tables.
+- Also this session: dashboard v3 (org-impact panel). 
+- Next: (optional) extend validate_auditor with the 4-domain flip; else paper polish / finalize.
+- Blocked on: Nothing.
+
+---
+
 ## 2026-10-02 — Organisational-impact push (project-first): stakes, CI-ready auditor, docs
 - Context: user wants the work to show CRITICAL importance for organisations today. Project
   improvements first, paper later, document everything for the paper.

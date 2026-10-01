@@ -647,11 +647,75 @@ def three_domain(csv_path, out):
     print(f"wrote {out}")
 
 
+def four_domain(csv_path, out):
+    """H1 + routing at FOUR domains {HDFS, BGL, OpenStack, Hadoop}. Shows the relative-containment
+    insight: adding Hadoop (the new widener) flips BGL from widener to victim, while HDFS collapse->
+    recover is unchanged and routing stays exact. Reads results/h1_4domain.csv."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        sys.exit("matplotlib not installed — pip install -r requirements.txt")
+
+    rows = _load(csv_path)
+    order = ["hdfs", "bgl", "openstack", "hadoop"]
+    domains = [d for d in order if any(r["domain"] == d for r in rows)]
+    labels = {"hdfs": "HDFS", "bgl": "BGL", "openstack": "OpenStack", "hadoop": "Hadoop"}
+
+    def col(dom, key):
+        return _mean_std([float(r[key]) for r in rows if r["domain"] == dom])
+    series = [("length_blind_f1", "Length, domain-blind", "#C1440E"),
+              ("length_da_f1", "Length, domain-aware (ours)", "#1C7293"),
+              ("known_events_f1", "Known Events", "#8AA29E")]
+    lbl_box = dict(boxstyle="round,pad=0.14", fc="white", ec="none", alpha=0.9)
+    n = len(series); gw = 0.82; bw = gw / n
+    fig, ax = plt.subplots(figsize=(10.5, 5.4))
+    for si, (key, label, color) in enumerate(series):
+        xs, ms, ss = [], [], []
+        for di, dom in enumerate(domains):
+            m, s = col(dom, key)
+            xs.append(di + (si - (n - 1) / 2) * bw); ms.append(m); ss.append(s)
+        bars = ax.bar(xs, ms, width=bw * 0.92, yerr=ss, capsize=3, label=label, color=color,
+                      edgecolor="black", linewidth=0.4, error_kw=dict(elinewidth=1.0))
+        for bar, m, s in zip(bars, ms, ss):
+            if m >= 0.02 or key == "length_blind_f1":
+                ax.text(bar.get_x() + bar.get_width() / 2, m + s + 0.02, f"{m:.2f}",
+                        ha="center", va="bottom", fontsize=8.5, bbox=lbl_box)
+    # annotations: HDFS collapse->recover; BGL widener->victim; Hadoop Length works
+    hi = domains.index("hdfs")
+    ax.annotate("collapse\n$\\rightarrow$ recover", xy=(hi - gw / 2 + 1.5 * bw, 0.561),
+                xytext=(hi + 0.02, 0.86), ha="center", fontsize=9, color="#1C7293",
+                fontweight="bold", arrowprops=dict(arrowstyle="->", color="#1C7293"))
+    if "bgl" in domains:
+        bi = domains.index("bgl")
+        ax.annotate("widener $\\rightarrow$ victim\n(Hadoop now swallows BGL)",
+                    xy=(bi - gw / 2 + 0.5 * bw, 0.03), xytext=(bi - 0.1, 0.46), ha="center",
+                    fontsize=8.5, color="#C1440E", fontweight="bold",
+                    arrowprops=dict(arrowstyle="->", color="#C1440E"))
+    ax.set_xticks(range(len(domains)))
+    ax.set_xticklabels([labels[d] for d in domains], fontsize=12)
+    ax.set_ylabel("$F_1$  (mean $\\pm$ std, 5 seeds)", fontsize=11)
+    ax.set_ylim(0, 1.3)
+    ax.set_title("H1 and routing generalize to four domains {HDFS, BGL, OpenStack, Hadoop}:\n"
+                 "adding a broader domain (Hadoop) flips BGL from widener to victim — exactly as the "
+                 "containment condition predicts", fontsize=11.5, y=1.05)
+    ax.legend(fontsize=9.5, loc="upper center", ncol=3, framealpha=0.95, columnspacing=1.2)
+    ax.grid(axis="y", alpha=0.3)
+    ax.text(0.5, -0.14, "Vocabulary-block routing = 1.000 across all four disjoint id blocks. "
+            "Hadoop's anomalies are length-detectable (Length works and the fix helps).",
+            transform=ax.transAxes, ha="center", fontsize=9, color="#4a5b6e", style="italic")
+    fig.tight_layout()
+    os.makedirs("results", exist_ok=True)
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    print(f"wrote {out}")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--kind",
                     choices=["f1_compare", "h1", "h2", "h3", "mech", "map", "replay",
-                             "arch", "3domain", "impact"],
+                             "arch", "3domain", "4domain", "impact"],
                     required=True)
     ap.add_argument("--single")
     ap.add_argument("--mixed")
@@ -682,5 +746,7 @@ if __name__ == "__main__":
         arch_generality("results/transformer_mechanism.csv", "results/mechanism_multiseed.csv", args.out)
     elif args.kind == "3domain":
         three_domain(args.mixed or "results/h1_3domain.csv", args.out)
+    elif args.kind == "4domain":
+        four_domain(args.mixed or "results/h1_4domain.csv", args.out)
     elif args.kind == "impact":
         impact_figure("results/impact_blindspot.csv", "results/impact_overhead.csv", args.out)
