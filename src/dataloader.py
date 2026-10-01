@@ -135,6 +135,7 @@ def build_federation(
     data_root: str,
     split: str = "iid",                       # 'iid' or 'lognormal' (quantity skew)
     seed: int = 0,
+    train_frac: "float | dict" = 0.01,        # fraction of normals for training (per-domain if dict)
     _injected=None,                           # for tests: {domain: (templates, examples)}
 ) -> Federation:
     """Build one federation spanning multiple domains over a merged vocabulary.
@@ -143,6 +144,11 @@ def build_federation(
     split        : how to partition a domain's data across its clients.
                    'iid' = even; 'lognormal' = quantity skew (matches the reference
                    paper's non-IID, sigma=0.25).
+    train_frac   : fraction of a domain's normal sequences used for the training pool
+                   (default 0.01, the reference convention). Pass a dict {domain: frac} to
+                   override per domain --- needed for small datasets (e.g. Hadoop has only 11
+                   normal applications, where 1% is zero). A floor of n_clients ensures no
+                   client is left empty; for the large datasets this changes nothing.
     _injected    : test hook to bypass disk loading.
     """
     rng = random.Random(seed)
@@ -168,9 +174,11 @@ def build_federation(
 
         # encode template-sequences -> global ids
         enc_normal = [vocab.encode_sequence(domain, s) for s in normal]
-        # 1% of normal for training (reference convention); rest to test pool
+        # train_frac of normal for training (reference convention = 1%); rest to test pool.
+        # Floor at n_clients so no client shard is empty (matters only for tiny domains).
         rng.shuffle(enc_normal)
-        n_train = max(1, int(0.01 * len(enc_normal)))
+        frac = train_frac.get(domain, 0.01) if isinstance(train_frac, dict) else train_frac
+        n_train = max(n_clients, int(frac * len(enc_normal)))
         train_pool = enc_normal[:n_train]
         test_normal = enc_normal[n_train:]
 
