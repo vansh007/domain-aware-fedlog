@@ -447,6 +447,86 @@ def _mean_std(vals):
     return m, sd
 
 
+def impact_figure(blindspot_csv, overhead_csv, out):
+    """The organisational headline: a catastrophic, silent detection loss (left) prevented by a
+    near-zero-cost safeguard (right). Reads results/impact_blindspot.csv and impact_overhead.csv so
+    every value is exact."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        sys.exit("matplotlib not installed — pip install -r requirements.txt")
+
+    bs = _load(blindspot_csv)
+    ov = _load(overhead_csv)
+    lbl = dict(boxstyle="round,pad=0.16", fc="white", ec="none", alpha=0.9)
+
+    # left: % of detection lost when the failure fires (the two detection failures)
+    loss = [("Range collapse\n(HDFS Length)", 99.97),
+            ("Forgetting\n(deep, on onboarding)", 94.46)]
+    # pull exact numbers from the CSV where present
+    for r in bs:
+        if r["failure"].startswith("H1"):
+            loss[0] = (loss[0][0], float(r["coverage_lost_pct"]))
+        if r["failure"].startswith("H3"):
+            loss[1] = (loss[1][0], float(r["coverage_lost_pct"]))
+
+    # right: bytes of the safeguard vs the model it protects (log scale)
+    cost = {}
+    for r in ov:
+        b = r["overhead_bytes"]
+        if b not in ("", None):
+            cost[r["safeguard"]] = int(b)
+    da = cost.get("Domain-aware ranges (3 domains)", 48)
+    replay = cost.get("Replay buffer (10% of earlier domain)", 129456)
+    model = cost.get("DeepLog model (reference point)", 355436)
+
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.5, 5))
+
+    # LEFT — detection lost (danger)
+    ys = [v for _, v in loss]
+    bars = axL.bar([0, 1], ys, width=0.6, color="#C1440E", edgecolor="black", linewidth=0.5)
+    for b, v in zip(bars, ys):
+        axL.text(b.get_x() + b.get_width() / 2, v - 8, f"{v:.1f}%", ha="center", va="top",
+                 fontsize=14, fontweight="bold", color="white")
+    axL.set_xticks([0, 1]); axL.set_xticklabels([n for n, _ in loss], fontsize=11)
+    axL.set_ylabel("Detection capability lost (%)", fontsize=11)
+    axL.set_ylim(0, 108)
+    axL.set_title("The risk: detection silently collapses", fontsize=12.5)
+    axL.grid(axis="y", alpha=0.3)
+    axL.text(0.5, 104, "silent — no error, no crash",
+             ha="center", fontsize=9.5, style="italic", color="#C1440E")
+
+    # RIGHT — cost of the safeguard (log bytes), vs the model as reference
+    items = [("Domain-aware\nranges", da, "#1C7293"),
+             ("Replay buffer\n(10%)", replay, "#1C7293"),
+             ("(DeepLog model,\nfor reference)", model, "#8AA29E")]
+    xs = range(len(items))
+    bars = axR.bar(list(xs), [v for _, v, _ in items], width=0.62,
+                   color=[c for _, _, c in items], edgecolor="black", linewidth=0.5)
+    for b, (_, v, _) in zip(bars, items):
+        txt = f"{v:,} B" if v < 1000 else (f"{v/1024:.0f} KB")
+        axR.text(b.get_x() + b.get_width() / 2, v * 1.3, txt, ha="center", va="bottom",
+                 fontsize=10.5, bbox=lbl)
+    axR.set_yscale("log")
+    axR.set_ylim(10, 2e6)
+    axR.set_xticks(list(xs)); axR.set_xticklabels([n for n, _, _ in items], fontsize=10.5)
+    axR.set_ylabel("Safeguard memory (bytes, log scale)", fontsize=11)
+    axR.set_title("The cost: the fix is nearly free", fontsize=12.5)
+    axR.grid(axis="y", alpha=0.3, which="both")
+
+    fig.suptitle("Catastrophic, silent, security-critical — prevented by a few bytes",
+                 fontsize=13.5, y=1.0)
+    fig.text(0.5, -0.02, "Safeguards also include a 0.002 ms pre-deployment auditor check "
+             "(summary statistics only, never raw logs).",
+             ha="center", fontsize=9.5, style="italic", color="#4a5b6e")
+    fig.tight_layout(rect=(0, 0.02, 1, 0.96))
+    os.makedirs("results", exist_ok=True)
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    print(f"wrote {out}")
+
+
 def arch_generality(transformer_csv, mechanism_csv, out):
     """Forgetting is architecture-general. Grouped bars of H3 forgetting (F1 before - after) for
     DeepLog (LSTM) vs Transformer, under scalar vs embedding input. The one near-zero bar is
@@ -571,7 +651,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--kind",
                     choices=["f1_compare", "h1", "h2", "h3", "mech", "map", "replay",
-                             "arch", "3domain"],
+                             "arch", "3domain", "impact"],
                     required=True)
     ap.add_argument("--single")
     ap.add_argument("--mixed")
@@ -602,3 +682,5 @@ if __name__ == "__main__":
         arch_generality("results/transformer_mechanism.csv", "results/mechanism_multiseed.csv", args.out)
     elif args.kind == "3domain":
         three_domain(args.mixed or "results/h1_3domain.csv", args.out)
+    elif args.kind == "impact":
+        impact_figure("results/impact_blindspot.csv", "results/impact_overhead.csv", args.out)

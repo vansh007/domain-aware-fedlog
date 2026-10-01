@@ -108,7 +108,10 @@ log-normal allocation, but every client still holds a slice of the \emph{same} d
 systems, and vendors produce categorically different logs) and \emph{evolving}, onboarding new
 log sources over time. This is precisely the regime the two claims were never tested in; indeed
 the public artifact of~\cite{pustozerova2026lightweight} ships \texttt{hdfs\_*} and \texttt{bgl\_*}
-configurations but no mixed configuration.
+configurations but no mixed configuration. The stakes are not academic: in exactly this regime we find
+detection \emph{silently} collapses---up to $99.97\%$ of a detector's anomaly coverage lost with no
+error or crash (Section~\ref{sec:impact})---a security-critical blind spot an operator never sees, yet
+one a few bytes of the right safeguard would have prevented.
 
 \textbf{This paper.} We place HDFS and BGL clients in \emph{one} federation over a merged event
 vocabulary, and separately let domains arrive \emph{sequentially}, and we test C1 and C2 directly.
@@ -810,11 +813,25 @@ consequential in production rather than academic curiosities.
 \textbf{The failures are silent and security-critical.} Neither the range-aggregation collapse nor the
 catastrophic forgetting raises an error, degrades a loss curve visibly, or crashes a service. The
 detector simply stops flagging anomalies for one domain while continuing to report healthy operation
-for the others---HDFS recall falls to zero (Proposition~\ref{prop:collapse}), or an earlier domain's
-$F_1$ drops from $0.70$ to $0.04$ the moment a new domain is onboarded. In a security setting this
-means an intrusion in the affected domain becomes invisible; in a reliability setting, an outage
-precursor is missed. A silent blind spot in a monitoring system is more dangerous than an outage of it,
-because operators continue to trust a system that has quietly stopped working.
+for the others. The magnitude is stark and measured (Fig.~\ref{fig:impact};
+\texttt{results/impact\_blindspot.csv}): domain-blind mixing drops HDFS Length recall from $0.369$ to
+$0.0001$---of the $6{,}211$ HDFS anomalies the detector caught alone, all but about two silently stop
+being flagged ($6{,}209$ of $16{,}838$ newly missed, $99.97\%$ of the detector's coverage), while
+sequential onboarding erases $94.5\%$ of the deep model's HDFS detection ($F_1$ $0.70\!\rightarrow\!0.04$).
+In a security setting each missed anomaly is an intrusion that becomes invisible; in a reliability
+setting, an outage precursor is lost. A silent blind spot in a monitoring system is more dangerous than
+an outage of it, because operators continue to trust a system that has quietly stopped working.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{impact_asymmetry.png}
+\caption{The organizational case in one view. \emph{Left}: when a failure fires, detection silently
+collapses---$99.97\%$ of the range detector's coverage, $94.5\%$ of the deep model's---with no error or
+crash. \emph{Right}: the safeguards that prevent it cost a few bytes (per-domain ranges) to a buffer
+smaller than the model it protects, plus a sub-millisecond pre-deployment check. Values from
+\texttt{results/impact\_\{blindspot,overhead\}.csv}.}
+\label{fig:impact}
+\end{figure}
 
 \textbf{Scaling coverage can destroy coverage.} The most alarming case is sequential onboarding: adding
 a monitored source---a routine, frequent operations action---can catastrophically erase detection for
@@ -831,10 +848,15 @@ embeddings, template-vector models, or the LLM-derived log features the field is
 feature space by construction, and is therefore exposed. As log analytics adopts large-model
 representations, this failure mode becomes \emph{more} likely, not less.
 
-\textbf{The safeguards cost almost nothing.} The remedies are cheap enough to adopt unconditionally:
-per-domain range parameters add $O(|\mathcal{D}|)$ state; tag-free vocabulary-block routing needs no
-labels (Corollary~\ref{cor:routing}); and a replay buffer of a few hundred sequences removes the
-forgetting at no architectural change (Section~\ref{sec:replay}). Crucially, our safety auditor
+\textbf{The safeguards cost almost nothing.} The remedies are cheap enough to adopt unconditionally,
+and we measure it (Fig.~\ref{fig:impact}, right; \texttt{results/impact\_overhead.csv}): per-domain
+range parameters add $O(|\mathcal{D}|)$ state---$48$ bytes for three domains; tag-free
+vocabulary-block routing needs no labels (Corollary~\ref{cor:routing}); and a replay buffer of a few
+hundred sequences ($\approx126$\,KB, \emph{smaller than the $347$\,KB model it protects}) removes the
+forgetting at no architectural change (Section~\ref{sec:replay}). The pre-deployment audit itself runs
+in $0.002$\,ms. The juxtaposition is the point: a catastrophic, silent, security-critical failure is
+averted for a few bytes and a sub-millisecond check---there is no efficiency-versus-safety trade-off to
+agonize over. Crucially, our safety auditor
 (Section~\ref{sec:auditor}, released as an open tool) converts a latent \emph{runtime} risk into a
 \emph{pre-deployment} configuration check that consumes only per-client summary statistics---event-id
 blocks and length ranges, never raw logs---so a federation operator can gate a rollout in continuous
