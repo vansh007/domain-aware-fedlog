@@ -32,6 +32,25 @@ Format for each entry:
 
 ---
 
+## 2026-10-02 (cont.) — 6-page CONFERENCE version built (docs/paper/conference.tex)
+- Context: user needs a 6-page paper -> only the best novelty, limited floats, "100% publishable".
+  Target: IEEE conference (2-column). Featured generality figure: architecture (Transformer).
+- Did: built docs/paper/conference.tex (\documentclass[conference]{IEEEtran}) condensing the full
+  main.tex (which stays as the extended/journal version). Ruthless cut to the spine:
+  * 3 figures: impact_asymmetry (the hook), two_by_two_map, architecture_generality.
+  * 3 tables: H1+routing (merged), mitigation comparison (replay/EWC/A-GEM), auditor validation 14/15.
+  * Everything else -> prose: reproduction gate, H2, ensemble, directionality, EWC/replay/3-/4-domain/
+    routing tables, and the h1/h3/mechanism/replay/three-domain figures.
+  * Proposition 1 kept with a compact 3-line proof. 12 references (trimmed from 17).
+  * New punchier title: "When Federated Log Anomaly Detection Silently Fails: A Safety Map...".
+- Found: ~2,400 body words + 6 floats + 12 refs ~= ~5 pages 2-column (under the 6-page cap, good margin).
+  Validates: 3 figs / 3 tables / Prop+proof / refs+cites all resolve. Every number spot-checked vs CSVs.
+- Next: compile on Overleaf to confirm exact page count + fix any overfull boxes; verify the 2-3
+  uncheckable citations (pustozerova DOI, fedlad arXiv); final proofread. main.tex = extended version.
+- Blocked on: Nothing.
+
+---
+
 ## 2026-10-02 (cont.) — 4th domain (Hadoop): containment is RELATIVE (widener->victim)
 - Did: Added Hadoop as a 4th domain (scripts/parse_hadoop.py: 55 apps, 11 normal/44 abnormal, 258
   event types, grouped per application). build_federation gained train_frac (per-domain dict + floor
