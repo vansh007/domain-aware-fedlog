@@ -85,8 +85,12 @@ collide. A domain tag travels with each sequence for per-domain evaluation.
 \textbf{Setup.} We use the HDFS and BGL benchmarks from Loghub~\cite{zhu2023loghub}. HDFS: $33$ event
 types, $558{,}223$ normal / $16{,}838$ abnormal sequences, length $29\pm6$. BGL: $394$ types,
 $37{,}823$ / $31{,}429$, length $69\pm747$. Following the reference, $1\%$ of each domain's normals
-form the training pool (3 HDFS + 2 BGL clients); we report per-domain $F_1$ (anomaly is positive) as
-mean\,$\pm$\,std over seeds $0$--$4$. All runs are CPU-only.
+form the training pool (the rest held out), partitioned across $3$ HDFS $+2$ BGL clients either
+uniformly (IID) or by a log-normal quantity skew ($\sigma{=}0.25$). We report per-domain $F_1$ (anomaly
+is positive) as mean\,$\pm$\,std over seeds $0$--$4$; every headline effect is consistent in sign across
+all seeds with a large paired effect size (Cohen's $d_z{>}20$), and we report paired $t$-tests where
+applicable. DeepLog evaluation is made tractable by deduplicating identical test sequences. All runs are
+CPU-only, and every reported number traces to a result file.
 
 \textbf{Detectors.} \emph{Length} learns the $[\min,\max]$ normal length (domain-blind FedAvg =
 global min/max); \emph{Known Events} learns the set of normal ids (FedAvg = set union);
@@ -119,14 +123,37 @@ is false: no anomaly of $a$ is flagged, giving $F_1=0$. Domain-aware Length test
 $\ell\notin[\underline{L}_a,\overline{L}_a]$, true for all $\ell\in A_a$ by hypothesis. \qedhere
 \end{proof}
 
-\noindent The condition is \emph{relative}: a domain is safe only until a broader one joins. Adding
-Hadoop (normal length up to $3{,}666>900$) to a four-domain federation flips BGL from widener to
-victim (domain-blind Length $0.033\!\rightarrow\!0.001$), exactly as predicted, while HDFS is
-unchanged and routing stays exact. \textbf{Tag-free routing} realizes the fix without a label:
-vocabulary-block routing recovers the true domain of \emph{every} test sequence (accuracy
-$1.000\pm0.000$) and reproduces the oracle-tag $F_1$ exactly (Table~\ref{tab:h1}); a conservative
-no-inference variant instead collapses on HDFS. The effect is highly significant (paired
-$t_4{=}47.4$, $p{=}1.2\times10^{-6}$).
+Three observations sharpen the result. First, the damage is \emph{asymmetric}: BGL Length is identical
+under both aggregations in every seed, because BGL is the domain that widens the range, not its victim;
+the repair is one-sided. Second, the effect is specific to range-based aggregation---Known Events (set
+union) is unaffected---so we pinpoint a mechanism rather than assert general collapse. Third, the story
+is unchanged under a log-normal quantity skew, and domain-aware Length is partition-invariant by
+construction. The effect is highly significant (paired $t_4{=}47.4$, $p{=}1.2\times10^{-6}$).
+
+\textbf{Containment is relative (and predictive).} Proposition~\ref{prop} is a statement over
+\emph{arbitrary} domains, so it makes a non-trivial prediction when the membership changes. We add
+Hadoop~\cite{zhu2023loghub} as a fourth domain, chosen because its normal length is \emph{broad} (up to
+$3{,}666>900$). The proposition then predicts Hadoop becomes the new widener and swallows \emph{BGL},
+which was itself the widener---and hence safe---in the two- and three-domain cases. Fig.~\ref{fig:4dom}
+confirms it exactly over five seeds: HDFS collapse and recovery is unchanged, routing stays exact
+across all four disjoint blocks, and BGL's domain-blind Length drops $0.033\!\rightarrow\!0.001$---BGL
+\emph{flips from widener to victim}---while domain-aware aggregation recovers it. A domain is thus safe
+only until a broader one joins, and the proposition says which, for any membership.
+
+\textbf{Tag-free routing} realizes the fix without a label: because the id blocks are disjoint, a
+sequence's domain is the majority block of its ids. Vocabulary-block routing recovers the true domain
+of \emph{every} test sequence (accuracy $1.000\pm0.000$) and reproduces the oracle-tag $F_1$ exactly
+(Table~\ref{tab:h1}); a conservative no-inference variant instead collapses on HDFS.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{four_domain_h1.png}
+\caption{Containment is relative. Adding Hadoop (broader than BGL) makes it the new widener: BGL's
+domain-blind Length drops $0.033\!\rightarrow\!0.001$---it flips from widener to victim, as
+Proposition~\ref{prop} predicts---while HDFS collapse/recovery is unchanged and routing stays exact
+over four disjoint blocks. Source: \texttt{results/h1\_4domain.csv}.}
+\label{fig:4dom}
+\end{figure}
 
 \begin{table}[t]
 \caption{H1: per-domain $F_1$ (mean$\pm$std, $5$ seeds), mixed federation. Vocabulary-block routing
@@ -188,12 +215,36 @@ simultaneous mixing. Source: \texttt{results/transformer\_mechanism.csv}.}
 A diagnosis is actionable only if the failure is fixable. When the new domain arrives we retain a
 small replay buffer of the earlier domain and train jointly; a $10\%$ buffer ($\approx558$ sequences)
 cuts forgetting $0.665\!\rightarrow\!0.004$ while the new domain is still learned
-(Table~\ref{tab:fix}). A memory-free EWC~\cite{kirkpatrick2017overcoming} alternative also works but
-only at $\lambda{=}10^{8}$ (a six-order-of-magnitude search). Benchmarked against A-GEM~\cite{agem2019},
-the standard episodic-memory method, at the \emph{same} memory budget, our plain replay matches it on
+(Table~\ref{tab:fix}). A $5\%$ buffer is too small to be reliable (recovering HDFS in one of three seeds), which delimits the
+minimum useful size; a $25\%$ buffer is cleaner still. Because replay stores raw sequences and not
+parameters, the model remains fixed-size.
+
+A memory-free alternative---elastic weight consolidation (EWC)~\cite{kirkpatrick2017overcoming}, which
+penalizes changes to weights important to the earlier domain via the Fisher information---also removes
+the forgetting, but only at $\lambda{=}10^{8}$: the penalty has no effect until $\lambda{=}10^{6}$ and
+succeeds only at $10^{8}$ (Table~\ref{tab:ewc}), so EWC must be tuned across six orders of magnitude
+whereas replay works out of the box. Benchmarked against A-GEM~\cite{agem2019}, the standard
+episodic-memory method, at the \emph{same} memory budget, our plain replay matches it on
 retention/forgetting and learns the new domain \emph{better} ($0.722$ vs.\ $0.657$)---A-GEM's gradient
-projection over-constrains new-domain learning. Simple replay is thus Pareto-competitive with the
-established toolkit; no exotic machinery is needed.
+projection over-constrains new-domain learning. The practical takeaway is a genuine trade-off, not a
+single winner: prefer replay when a small earlier-domain buffer is permissible (no tuning), EWC when it
+is not. Either way, simple replay is Pareto-competitive with the established toolkit; no exotic
+machinery is needed to make sequential onboarding safe.
+
+\begin{table}[t]
+\caption{EWC $\lambda$-sweep (embedding-DeepLog, HDFS$\rightarrow$BGL, mean, $3$ seeds): the memory-free
+penalty removes the forgetting only at $\lambda{=}10^{8}$. Source: \texttt{results/mitigation\_ewc.csv}.}
+\label{tab:ewc}
+\centering\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+EWC $\lambda$ & $0$ & $10^{2}$ & $10^{4}$ & $10^{6}$ & $10^{8}$ \\
+\midrule
+HDFS $F_1$ after & $0.039$ & $0.040$ & $0.044$ & $0.212$ & $\mathbf{0.690}$ \\
+Forgetting & $+0.665$ & $+0.664$ & $+0.659$ & $+0.491$ & $\mathbf{+0.014}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{table}[t]
 \caption{Mitigation comparison at a matched $10\%$ memory budget (embedding-DeepLog, sequential
@@ -250,7 +301,12 @@ drops HDFS Length recall $0.369\!\rightarrow\!0.0001$, silently missing $6{,}209
 anomalies ($99.97\%$ of coverage), and sequential onboarding erases $94.5\%$ of the deep model's
 detection. A silent blind spot is more dangerous than an outage, because operators keep trusting a
 system that has quietly stopped working---and \emph{extending} monitoring to a new source can
-\emph{blind} monitoring of existing ones. Yet the safeguards cost almost nothing: per-domain ranges add
+\emph{blind} monitoring of existing ones. The onboarding that triggers this is a routine operations
+action, so the failure needs no attacker to create; an adversary active in the affected domain simply
+finds the monitoring effectively off. And the risk is \emph{model-class-wide}: because it is governed by
+a shared feature space, any semantics-based encoder---learned embeddings, template vectors, or the
+LLM-derived log features the field is now adopting---is exposed, so the failure mode becomes \emph{more}
+likely as log analytics scales up, not less. Yet the safeguards cost almost nothing: per-domain ranges add
 $48$ bytes, the replay buffer ($\approx126$\,KB) is smaller than the $347$\,KB model it protects, and
 the auditor runs in $0.002$\,ms. Continuous \emph{effective} monitoring is also mandated (GDPR Art.~32,
 HIPAA, PCI-DSS, NIS2); a detector that silently degrades on the next onboarding is a control gap the
@@ -266,29 +322,57 @@ Source: \texttt{results/impact\_\{blindspot,overhead\}.csv}.}
 \label{fig:impact}
 \end{figure}
 
-\section{Related Work}
-Deep log detectors (DeepLog~\cite{du2017deeplog}, LogAnomaly~\cite{meng2019loganomaly}) and the
-HDFS/BGL benchmarks~\cite{zhu2023loghub} are standard, but ask a question orthogonal to detector
-design. FedAvg~\cite{mcmahan2017communication} and the heterogeneity survey of Kairouz \emph{et
-al.}~\cite{kairouz2021advances} catalogue quantity/label/feature skew; the \emph{domain} skew we study
-sits at the extreme of feature skew and is under-explored for logs. The closest work,
-Pustozerova \emph{et al.}~\cite{pustozerova2026lightweight}, and a recent testbed
-(FedLAD~\cite{fedlad2025}), keep every client on one dataset or provide infrastructure, but none
-isolates the two claims under a single mixed-domain federation or identifies the input representation
-as the lever governing forgetting. Sequential arrival is a continual-learning problem; EWC~\cite{kirkpatrick2017overcoming},
-the continual survey~\cite{delange2022continual}, and A-GEM~\cite{agem2019} supply mitigations we
-adopt and compare. Our contribution is the safety map, its proof, and a validated auditor for the
-heterogeneous, evolving regime.
+\textbf{Log anomaly detection.} Logs are parsed into event templates (Drain~\cite{he2017drain}) and
+classified by statistical or deep detectors; surveys and empirical studies report that no single method
+dominates across datasets~\cite{landauer2023survey}, motivating the ensemble baselines we also consider.
+We reuse DeepLog~\cite{du2017deeplog}, LogAnomaly~\cite{meng2019loganomaly}, and the HDFS/BGL
+benchmarks~\cite{zhu2023loghub}, but ask a question orthogonal to detector design: what happens when
+clients hold \emph{different} log domains.
+
+\textbf{Federated learning under heterogeneity.} FedAvg~\cite{mcmahan2017communication} averages client
+models; data heterogeneity is the central obstacle. Zhao \emph{et al.}~\cite{zhao2018federated} show
+non-IID data induces weight divergence, and the survey of Kairouz \emph{et al.}~\cite{kairouz2021advances}
+catalogues quantity, label, and feature skew. The \emph{domain} skew we study---clients from different
+generative processes with largely disjoint vocabularies---sits at the extreme of feature skew and is
+under-explored for logs. Notably our H2 result is a partial counterpoint to ``non-IID hurts FedAvg'':
+with a scalar-id input the domains occupy disjoint ranges and never compete, so simultaneous mixing is
+safe; we show this robustness is representation-dependent.
+
+\textbf{Federated and continual log analytics.} The closest work, Pustozerova \emph{et
+al.}~\cite{pustozerova2026lightweight}, whose methods and pipeline we adopt, keeps every client on one
+dataset; a federated-deep-log study enumerates open challenges~\cite{fedlog2024openchallenges}, and
+FedLAD~\cite{fedlad2025} provides a testbed to vary clients---but none isolates the two claims under a
+single mixed-domain federation or identifies the input representation as the lever governing forgetting.
+Sequential arrival is a continual-learning problem; catastrophic forgetting and its defenses
+(EWC~\cite{kirkpatrick2017overcoming}, the continual survey~\cite{delange2022continual},
+A-GEM~\cite{agem2019}) are well studied, and forgetting is known to compound with federation. Our
+contribution is the safety map, its proof, the architecture-generality of the mechanism, and a validated
+auditor for the heterogeneous, evolving regime.
+
+\section{Threats to Validity}
+Our federated DeepLog operates at $F_1\approx0.70$, not the reference's headline $\sim0.93$. We
+investigated this directly: a standalone \emph{centralized} DeepLog on the full HDFS normal set (all
+$558{,}223$ sequences, no federation) likewise does not approach $0.93$---training loss plateaus near
+$0.20$ and recall is capped---so the gap is a property of the scalar-input next-event model and the
+top-$g$ rule, not an artifact of federation or subsampling. Crucially, the forgetting finding is a
+\emph{relative} effect ($0.70\!\rightarrow\!0.04$ vs.\ $0.70\!\rightarrow\!0.70$) and does not depend
+on the absolute level. The two domains we add for generality are small (OpenStack ships only four
+labelled, order-based anomalies; Hadoop only $55$ applications, hence a larger-than-$1\%$ training
+fraction), so we use them for the range/routing and relative-containment results, which their rich
+\emph{normal} statistics support, rather than as headline detection scores. Finally, like the reference,
+ECVC uses a transductive threshold and we compare only within our own controlled codebase.
 
 \section{Conclusion}
 Two reported properties of federated log anomaly detection break in a heterogeneous, evolving
 federation: range aggregation collapses (provably), and deep models forget under sequential arrival
 into a shared representation---silently losing up to $99.97\%$ of detection, across two architectures
-and up to four domains. The fixes are near-free and Pareto-competitive with the established toolkit,
-and a validated, summary-statistics-only auditor predicts the failures before training. One limitation:
-our federated DeepLog operates at $F_1\approx0.70$, not the reference's tuned $\sim0.93$ (a documented
-scalar-input ceiling); the forgetting result is a \emph{relative} effect and unaffected. Future work:
-alert-labelled sources (Thunderbird, Spirit) and automatic EWC-penalty selection.
+and up to four domains, with the earlier ``widener'' demoted to a victim exactly as predicted. The
+fixes are near-free and Pareto-competitive with the established toolkit, and a validated,
+summary-statistics-only auditor predicts the failures \emph{before} training, turning a silent runtime
+risk into a pre-deployment check. The practical upshot is a way to keep the privacy and efficiency of
+federated log analytics in a realistic deployment without the silent, security-critical blind spots
+those benefits would otherwise hide. Future work: alert-labelled sources (Thunderbird, Spirit) and
+automatic EWC-penalty selection.
 
 \begin{thebibliography}{99}
 \bibitem{landauer2023survey} M.~Landauer \emph{et al.}, ``Deep learning for anomaly detection in log
@@ -307,6 +391,11 @@ with fixed depth tree,'' in \emph{IEEE ICWS}, 2017, pp.~33--40.
 AI-driven log analytics,'' in \emph{IEEE ISSRE}, 2023.
 \bibitem{kairouz2021advances} P.~Kairouz \emph{et al.}, ``Advances and open problems in federated
 learning,'' \emph{Found. Trends Mach. Learn.}, vol.~14, no.~1--2, pp.~1--210, 2021.
+\bibitem{zhao2018federated} Y.~Zhao \emph{et al.}, ``Federated learning with non-IID data,''
+\emph{arXiv:1806.00582}, 2018.
+\bibitem{fedlog2024openchallenges} P.~Himler, M.~Landauer, F.~Skopik, and M.~Wurzenberger, ``Anomaly
+detection in log-event sequences: A federated deep learning approach and open challenges,'' \emph{Mach.
+Learn. Appl.}, vol.~16, p.~100554, 2024.
 \bibitem{fedlad2025} Y.~Liao \emph{et al.}, ``FedLAD: A modular and adaptive testbed for federated log
 anomaly detection,'' \emph{arXiv:2512.08277}, 2025.
 \bibitem{kirkpatrick2017overcoming} J.~Kirkpatrick \emph{et al.}, ``Overcoming catastrophic forgetting
