@@ -548,10 +548,12 @@ the scalar-id encoding (blue) keeps them in disjoint ranges and no forgetting oc
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{two_by_two_map.png}
-\caption{The $2\times2$ safety map summarizing H2, H3, and the mechanism experiment. Across
-\{arrival pattern\}$\times$\{input representation\}, only \emph{(sequential, shared representation)}
-fails; the other three regimes are safe. Values are the measured per-domain drop or forgetting. The
-failing cell is shown for the forward order HDFS$\rightarrow$BGL; it is directional (Table~\ref{tab:reverse}).}
+\caption{The $2\times2$ safety map summarizing H2, H3, and the mechanism and architecture experiments.
+Across \{arrival pattern\}$\times$\{feature space\}, only \emph{(sequential arrival, shared feature
+space)} fails---for both an LSTM and a Transformer; the other three regimes are safe. A disjoint feature
+space arises only for a scalar-id LSTM; any learned embedding, or any attention model (even under a
+scalar id), shares one. The failing cell is for the forward order HDFS$\rightarrow$BGL and is directional
+(Table~\ref{tab:reverse}).}
 \label{fig:map}
 \end{figure}
 

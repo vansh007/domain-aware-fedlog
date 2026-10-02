@@ -223,8 +223,10 @@ BGL  & $0.6459$ & $0.7517$ & $-0.1058\pm0.0023$ \\
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.84\columnwidth]{two_by_two_map.png}
-\caption{The $2\times2$ safety map. Only \emph{(sequential, shared representation)} fails; the other
-three regimes are safe. Confirmed for a Transformer as well (Fig.~\ref{fig:arch}).}
+\caption{The $2\times2$ safety map over \{arrival pattern\}$\times$\{feature space\}. Only
+\emph{(sequential arrival, shared feature space)} fails---and for \emph{both} an LSTM and a Transformer;
+the other three regimes are safe. A disjoint feature space arises only for a scalar-id LSTM; any learned
+embedding, or any attention model (even under a scalar id), shares one (Fig.~\ref{fig:arch}).}
 \label{fig:map}
 \end{figure}
 

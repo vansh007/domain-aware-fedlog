@@ -338,9 +338,10 @@ def h2_bars(h2_path: str, out: str) -> None:
 
 
 def two_by_two_map(out: str) -> None:
-    """The signature conceptual figure: a 2x2 over {arrival pattern} x {representation}.
-    Only (sequential, shared-representation) fails. Values are the paper's measured drops.
-    This figure summarizes H2 + H3 + the mechanism experiment in one panel."""
+    """The signature conceptual figure: a 2x2 over {arrival pattern} x {feature space}. Only
+    (sequential, shared feature space) fails --- and this holds for BOTH architectures, because the
+    deciding axis is whether domains share a feature space, not the raw input encoding. Values are the
+    measured per-domain drop / forgetting. Summarizes H2, H3, the mechanism, and the architecture test."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -349,41 +350,44 @@ def two_by_two_map(out: str) -> None:
     except ImportError:
         sys.exit("matplotlib not installed — pip install -r requirements.txt")
 
-    SAFE = "#2E7D32"; FAIL = "#C1440E"
-    # (col, row) -> (bg, verdict, detail).  col: 0=simultaneous 1=sequential
-    #                                        row: 0=scalar(disjoint) 1=embedding(shared)
+    SAFE = "#2E7D32"; SAFE_D = "#1f5a24"; FAIL = "#C1440E"; FAIL_D = "#8f3209"
+    # (col,row): col 0=simultaneous 1=sequential ; row 0=disjoint 1=shared
     cells = {
-        (0, 0): (SAFE, "SAFE", "HDFS drop\n+0.0002"),
-        (1, 0): (SAFE, "SAFE", "forgetting\n0.000"),
-        (0, 1): (SAFE, "SAFE", "HDFS drop\n-0.0025"),
-        (1, 1): (FAIL, "FAILS", "HDFS F1\n0.70 -> 0.04\nforgetting 0.665"),
+        (0, 0): (SAFE, SAFE_D, "SAFE", "no degradation\n($F_1$ drop $+0.0002$)"),
+        (1, 0): (SAFE, SAFE_D, "SAFE", "no forgetting\n($0.000$)"),
+        (0, 1): (SAFE, SAFE_D, "SAFE", "no degradation\n($F_1$ drop $\\leq 0.007$)"),
+        (1, 1): (FAIL, FAIL_D, "FAILS", "catastrophic forgetting\n$F_1\\;0.70\\rightarrow0.04$\n"
+                                        "(LSTM and Transformer)"),
     }
-    fig, ax = plt.subplots(figsize=(8.2, 6))
-    for (c, r), (bg, verdict, detail) in cells.items():
-        ax.add_patch(FancyBboxPatch((c + 0.04, r + 0.04), 0.92, 0.92,
-                     boxstyle="round,pad=0.0,rounding_size=0.04",
-                     linewidth=0, facecolor=bg, alpha=0.90))
+    fig, ax = plt.subplots(figsize=(8.6, 6.4))
+    for (c, r), (bg, edge, verdict, detail) in cells.items():
+        ax.add_patch(FancyBboxPatch((c + 0.05, r + 0.05), 0.90, 0.90,
+                     boxstyle="round,pad=0.0,rounding_size=0.045",
+                     linewidth=2.2, edgecolor=edge, facecolor=bg, alpha=0.95))
         mark = "✓" if verdict == "SAFE" else "✗"
-        ax.text(c + 0.5, r + 0.72, f"{mark} {verdict}", ha="center", va="center",
-                fontsize=17, fontweight="bold", color="white")
-        ax.text(c + 0.5, r + 0.36, detail, ha="center", va="center",
-                fontsize=12, color="white")
+        ax.text(c + 0.5, r + 0.70, f"{mark}  {verdict}", ha="center", va="center",
+                fontsize=19, fontweight="bold", color="white")
+        ax.text(c + 0.5, r + 0.34, detail, ha="center", va="center", fontsize=12.5, color="white")
 
-    ax.set_xlim(0, 2); ax.set_ylim(0, 2)
+    ax.set_xlim(-0.02, 2.02); ax.set_ylim(-0.18, 2.02)
     ax.set_xticks([0.5, 1.5]); ax.set_yticks([0.5, 1.5])
-    ax.set_xticklabels(["Simultaneous\n(mixed at once)", "Sequential\n(arrives later)"], fontsize=12)
-    ax.set_yticklabels(["Scalar id\n(disjoint ranges)", "Embedding\n(shared feature space)"],
-                       fontsize=12, rotation=90, va="center")
-    ax.set_xlabel("Arrival pattern", fontsize=13, fontweight="bold")
-    ax.set_ylabel("Input representation", fontsize=13, fontweight="bold")
+    ax.set_xticklabels(["Simultaneous\n(mixed at once)", "Sequential\n(arrives later)"], fontsize=12.5)
+    ax.set_yticklabels(["Disjoint\nfeature space", "Shared\nfeature space"],
+                       fontsize=12.5, rotation=90, va="center")
+    ax.set_xlabel("Arrival pattern", fontsize=13.5, fontweight="bold")
+    ax.set_ylabel("Representation", fontsize=13.5, fontweight="bold")
     ax.set_title("When is federated log anomaly detection safe?\n"
-                 "Only one of four regimes fails", fontsize=14)
+                 "Only (sequential arrival, shared feature space) fails — for both architectures",
+                 fontsize=13.5)
+    ax.text(1.0, -0.14, "Disjoint = scalar-id LSTM only.   Shared = any learned embedding, or any "
+            "attention model (even under a scalar id).",
+            ha="center", va="center", fontsize=9.5, style="italic", color="#4a5b6e")
     for s in ax.spines.values():
         s.set_visible(False)
     ax.tick_params(length=0)
     fig.tight_layout()
     os.makedirs("results", exist_ok=True)
-    fig.savefig(out, dpi=200)
+    fig.savefig(out, dpi=200, bbox_inches="tight")
     print(f"wrote {out}")
 
 
@@ -488,8 +492,9 @@ def impact_figure(blindspot_csv, overhead_csv, out):
     ys = [v for _, v in loss]
     bars = axL.bar([0, 1], ys, width=0.6, color="#C1440E", edgecolor="black", linewidth=0.5)
     for b, v in zip(bars, ys):
-        axL.text(b.get_x() + b.get_width() / 2, v - 8, f"{v:.1f}%", ha="center", va="top",
-                 fontsize=14, fontweight="bold", color="white")
+        txt = f"{v:.2f}%" if v >= 99 else f"{v:.1f}%"   # keep 99.97% honest, not a rounded 100%
+        axL.text(b.get_x() + b.get_width() / 2, v - 8, txt, ha="center", va="top",
+                 fontsize=13.5, fontweight="bold", color="white")
     axL.set_xticks([0, 1]); axL.set_xticklabels([n for n, _ in loss], fontsize=11)
     axL.set_ylabel("Detection capability lost (%)", fontsize=11)
     axL.set_ylim(0, 108)
