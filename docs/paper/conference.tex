@@ -64,7 +64,10 @@ different log sources) and \emph{evolving} (new sources onboarded over time)---i
 artifact of~\cite{pustozerova2026lightweight} ships \texttt{hdfs\_*} and \texttt{bgl\_*} configs but
 no mixed one. The stakes are not academic: in exactly this regime detection collapses \emph{silently},
 with no error or crash---up to $99.97\%$ of a detector's coverage lost (Sec.~\ref{sec:impact}), a
-blind spot an operator never sees, yet one a few bytes of the right safeguard would prevent.
+blind spot an operator never sees, yet one a few bytes of the right safeguard would prevent. Concretely,
+a bank that onboards a new payment-gateway log source into its federated detector can, in a single
+routine deployment, blind the anomaly detection on its existing core-banking logs---while every
+dashboard still reports healthy operation.
 
 \textbf{Contributions.} (i) We place HDFS and BGL clients in one federation over a merged vocabulary
 and show domain-blind range aggregation collapses on the tighter domain, which we \emph{prove} as a
@@ -172,17 +175,50 @@ Length, domain-aware (vocab-block, no tag) & $\mathbf{0.561\pm0.024}$ & $0.033\p
 \end{tabular}
 \end{table}
 
+\textbf{Scope: we do not overclaim.} The reference's strongest HDFS method is the union ensemble
+Events\,$\lor$\,Length\,$\lor$\,ECVC, which reaches $F_1{=}0.984$. Swapping domain-blind for
+domain-aware Length leaves the \emph{ensemble} unchanged, because the combination is a logical OR and
+ECVC alone already attains $F_1{=}0.968$ (recall $0.96$), driving the union's recall to $\approx1.0$; a
+recovered Length only adds detections the ensemble already makes. We therefore scope H1's practical
+impact honestly: domain-aware aggregation is decisive for \emph{lightweight-only} deployments
+(Length/Events without a costly nearest-neighbour store---exactly the efficiency regime the reference
+motivates), where HDFS Length moves from $0.000$ to $0.561$; we do \emph{not} claim domain mixing breaks
+the reference's best method. The silent, security-critical failures we quantify below arise precisely in
+the lightweight and deep regimes that efficiency- and privacy-constrained federations actually run.
+
 \subsection{H2/H3: simultaneous is safe, sequential forgets}
 For the deep model the key axis is not mixing but \emph{arrival pattern combined with representation}
-(Fig.~\ref{fig:map}). \emph{Simultaneous} mixed FedAvg does \emph{not} degrade DeepLog (HDFS drop
-$+0.0002\pm0.0001$; BGL even improves), under both inputs. But under \emph{sequential} arrival the
+(Fig.~\ref{fig:map}). \emph{Simultaneous} mixed FedAvg does \emph{not} degrade DeepLog (Table~\ref{tab:h2}): the drop is
+essentially zero on HDFS ($+0.0002\pm0.0001$) and negative on BGL (mixed is \emph{better}), under both
+the scalar and the embedding input. This strengthens, rather than contradicts, the generality of deep
+federated detection: with disjoint input ranges the model separates the domains by magnitude and weight
+averaging never reconciles conflicting behaviours on the same inputs. But under \emph{sequential} arrival the
 embedding model \emph{catastrophically forgets} HDFS---$F_1\,0.70\!\rightarrow\!0.04$, forgetting
 $0.665\pm0.003$---whereas the scalar input forgets nothing ($0.000$). A controlled scalar-vs-embedding
 experiment isolates the cause: a \emph{shared feature space} across domains, not the aggregation
 method ($p{=}1.2\times10^{-5}$). Separately, set-union Known Events never forgets but grows
-$\times3.7$ per added domain, breaking C2 under evolution. The forgetting is also \emph{directional}:
-the reverse order (broad domain first) does not forget ($-0.103$), so the dangerous case is onboarding
-a broad-vocabulary domain after a narrow one.
+$\times3.7$ per added domain, breaking C2 under evolution. The forgetting is also \emph{directional}: reversing the order (BGL first, then HDFS) does \emph{not}
+forget the earlier domain---BGL $F_1$ actually rises, ``forgetting'' $-0.103\pm0.006$ (embedding) and
+$-0.125\pm0.017$ (scalar). So the failure is not merely \emph{(sequential, shared representation)} but
+specifically onboarding a broad-vocabulary domain \emph{after} a narrow one: the larger new domain's
+training dominates the shared representation and overwrites the narrow region the earlier domain
+occupied. This turns a diagnosis into an operational lever---where the schedule is controllable,
+introduce broad-vocabulary domains \emph{earlier}.
+
+\begin{table}[t]
+\caption{H2: DeepLog per-domain $F_1$, single-domain vs.\ mixed (mean$\pm$std, $3$ seeds). Simultaneous
+mixing does not degrade the deep model. Source: \texttt{results/h2\_multiseed.csv}.}
+\label{tab:h2}
+\centering\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Domain & Single-domain & Mixed & Drop \\
+\midrule
+HDFS & $0.7039$ & $0.7037$ & $+0.0002\pm0.0001$ \\
+BGL  & $0.6459$ & $0.7517$ & $-0.1058\pm0.0023$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure}[t]
 \centering
@@ -272,9 +308,14 @@ raw logs, preserving the federated privacy model---and returns which failures a 
 hit and the prescribed fix. Crucially, we \emph{validate} it: run blind on every measured configuration
 (two architectures $\times$ two inputs $\times$ arrival patterns, plus the lightweight collapse cases),
 its verdict matches the observed outcome in $14$ of $15$ cases (Table~\ref{tab:audit}), including all
-ten deep-model cells. The one error is a conservative false positive---the safe direction for a safety
-check. Released as a CLI, it exits non-zero on a risky configuration and passes once a mitigation is
-declared, gating a rollout in CI.
+ten deep-model cells. The one error is a conservative false positive (it flags a structurally-real range coupling on
+OpenStack, whose anomalies happen to be order-based)---the safe direction for a safety check, and no
+genuine failure is missed. The auditor also internalizes the architecture finding: it flags an
+attention model as unsafe where an LSTM would be safe, because a projection shares feature space even
+under a scalar id. Released as a CLI, it exits non-zero on a risky configuration (e.g.\ a sequential
+embedding onboarding) and passes once a mitigation is declared (e.g.\ \texttt{--mitigation replay}),
+so a federation change can be gated in continuous integration---turning a latent runtime risk into a
+pre-deployment check that consumes only summary statistics.
 
 \begin{table}[t]
 \caption{The auditor, run blind, predicts the measured outcome in $14/15$ configurations.
@@ -308,10 +349,15 @@ a shared feature space, any semantics-based encoder---learned embeddings, templa
 LLM-derived log features the field is now adopting---is exposed, so the failure mode becomes \emph{more}
 likely as log analytics scales up, not less. Yet the safeguards cost almost nothing: per-domain ranges add
 $48$ bytes, the replay buffer ($\approx126$\,KB) is smaller than the $347$\,KB model it protects, and
-the auditor runs in $0.002$\,ms. Continuous \emph{effective} monitoring is also mandated (GDPR Art.~32,
-HIPAA, PCI-DSS, NIS2); a detector that silently degrades on the next onboarding is a control gap the
-auditor catches. There is no efficiency-versus-safety trade-off to agonize over---the safe
-configuration is essentially free.
+the auditor runs in $0.002$\,ms. Federated log analytics is adopted exactly in the sectors that cannot centralize logs---banks,
+healthcare, telecom and IoT fleets, multi-tenant clouds, critical infrastructure---all of which run many
+different sources and onboard new ones continuously, the regime our study targets. Continuous
+\emph{effective} monitoring is also a mandated control there (GDPR Art.~32's ``ongoing effectiveness,''
+HIPAA audit controls, PCI-DSS Req.~10/11, EU NIS2): a detector that passes a one-time acceptance test
+and then silently degrades on the next onboarding violates the ongoing-effectiveness requirement, and
+the pre-deployment auditor is an auditable artifact that the configuration was checked for these known
+failures before each change. There is no efficiency-versus-safety trade-off to agonize over---the safe
+configuration is essentially free, provided one knows to choose it, which the auditor supplies.
 
 \begin{figure}[t]
 \centering
